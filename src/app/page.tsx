@@ -1,361 +1,324 @@
-"use client";
-
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building2, Users, FileText, CheckCircle, Calendar, Settings, Search, AlertTriangle } from "lucide-react";
-import LoginForm from "@/components/auth/LoginForm";
-import ProjectCreationModal from "@/components/projects/ProjectCreationModal";
-import ModelUpload from "@/components/bim/ModelUpload";
-import ProductionDashboard from "@/components/production/ProductionDashboard";
-import QualityControlDashboard from "@/components/controls/QualityControlDashboard";
-import UserManagement from "@/components/auth/UserManagement";
-import ProjectManagement from "@/components/admin/ProjectManagement";
-import { User, Project, db, getRoleDisplayName } from "@/lib/database";
-
-export default function HomePage() {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [activeTab, setActiveTab] = useState("projects");
-  const [selectedProject, setSelectedProject] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Check for saved user on page load
-    const savedUser = localStorage.getItem('bob_user');
-    if (savedUser) {
-      try {
-        const parsedUser = JSON.parse(savedUser);
-        setUser(parsedUser);
-        console.log('Loaded saved user:', parsedUser);
-      } catch (error) {
-        console.error('Failed to parse saved user:', error);
-        localStorage.removeItem('bob_user');
-      }
-    }
-    setIsLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (user) {
-      loadUserProjects();
-    }
-  }, [user]);
-
-  const loadUserProjects = async () => {
-    if (!user) return;
-    try {
-      const userProjects = await db.getProjectsForUser(user.id);
-      setProjects(userProjects);
-    } catch (error) {
-      console.error('Failed to load projects:', error);
-    }
-  };
-
-  const handleLogin = (userData: User) => {
-    console.log("User logged in:", userData);
-    setUser(userData);
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("bob_user", JSON.stringify(userData));
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('bob_user');
-    setUser(null);
-    setSelectedProject(null);
-    console.log('User logged out');
-  };
-
-  const handleProjectCreate = (newProject: Project) => {
-    setProjects(prev => [...prev, newProject]);
-  };
-
-  if (!user) {
-    return <LoginForm onLogin={handleLogin} />;
-  }
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
+﻿export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Left - Logo */}
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <Building2 className="h-8 w-8 text-blue-600" />
-                <h1 className="text-2xl font-bold text-slate-900">BOB</h1>
-              </div>
-              <Badge variant="secondary" className="text-xs">
-                BIM Operations & Building Management
-              </Badge>
-            </div>
-
-            {/* Center - Search */}
-            <div className="flex-1 max-w-md mx-8">
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Søk prosjekter, brukere, filer..."
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
-            {/* Right - Project selector + User menu */}
-            <div className="flex items-center space-x-4">
-              {/* PROJECT SELECTOR DROPDOWN */}
-              <div className="flex items-center space-x-2">
-                <span className="text-sm font-medium text-slate-700">Prosjekt:</span>
-                <Select value={selectedProject || ""} onValueChange={setSelectedProject}>
-                  <SelectTrigger className="w-64">
-                    <SelectValue placeholder="Velg prosjekt...">
-                      {selectedProject && projects.find(p => p.id === selectedProject)?.name}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        <div className="flex items-center space-x-2">
-                          <Building2 className="w-4 h-4" />
-                          <span>{project.name}</span>
-                          <Badge variant={project.status === 'active' ? 'default' : 'secondary'} className="ml-2">
-                            {project.status}
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <Button variant="outline" size="sm" onClick={() => setActiveTab("users")}>
-                <Users className="w-4 h-4 mr-2" />
-                Users
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setActiveTab("admin")}>
-                <Settings className="w-4 h-4 mr-2" />
-                Admin
-              </Button>
-              <div className="flex items-center space-x-3">
-                <div className="text-right">
-                  <p className="text-sm font-medium text-slate-900">{user.name}</p>
-                  <p className="text-xs text-slate-600">{getRoleDisplayName(user.role)} • {user.company}</p>
-                </div>
-                <div className="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">
-                    {user.name.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <Button variant="outline" size="sm" onClick={handleLogout}>
-                  Logout
-                </Button>
-              </div>
-            </div>
-          </div>
+    <div className="landing-page">
+      <header className="landing-header">
+        <div className="logo">
+          ALTBIM <span>Bygg &amp; BIM</span>
         </div>
+        <a className="login-button" href="/app">
+          Logg inn / Test BOB
+        </a>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-slate-900 mb-2">
-            Velkommen til BOB
-          </h2>
-          <p className="text-lg text-slate-600 max-w-3xl">
-            Ditt digitale verktøy for byggeprosjekter som kobler BIM-modeller direkte til produksjon, 
-            logistikk og prosjektstyring. Generer mengdelister, lag arbeidstegninger, 
-            og administrer kvalitetskontroller på ett sted.
-          </p>
-        </div>
-
-        {!selectedProject && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-            <div className="flex items-center space-x-2">
-              <AlertTriangle className="w-5 h-5 text-yellow-600" />
-              <p className="text-yellow-800 font-medium">Ingen prosjekt valgt</p>
+      <main className="landing-main">
+        <section className="hero">
+          <div className="hero-text">
+            <div className="pill">
+              <div className="pill-dot"></div>
+              <span>Nyhet</span>
+              <span>BOB kommer snart</span>
             </div>
-            <p className="text-yellow-700 text-sm mt-1">
-              Velg et prosjekt fra dropdown-menyen øverst for å få tilgang til BIM-modeller, produksjonsverktøy og kontroller.
+
+            <h1>
+              Din digitale
+              <span>byggeplass- og BIM-assistent</span>
+            </h1>
+
+            <p className="lead">
+              BOB er et smart verkt&oslash;y utviklet av <strong>Andreas Ludvigsen Theil</strong> i{" "}
+              <strong>ALTBIM</strong> &ndash; laget for entrepren&oslash;rer, prosjekterende og byggherrer som vil ha mer
+              kontroll, mindre rot og bedre flyt i prosjektene.
             </p>
+
+            <p className="tagline">
+              Fokus p&aring; effektiv prosjektstyring, logistikk, mengder og kvalitet &ndash; direkte koblet mot modell og
+              prosjektdata.
+            </p>
+
+            <div className="actions">
+              <div className="btn-primary">BOB er under utvikling</div>
+              <div className="btn-ghost">F&oslash;rste versjon: Planlagt lansering 2026</div>
+              <a className="btn-link" href="/app">
+                Logg inn / G&aring; til BOB &rarr;
+              </a>
+            </div>
+
+            <div className="meta">
+              <strong>ALTBIM</strong> &bull; Utvikling av verkt&oslash;y for moderne byggeprosjekter
+            </div>
           </div>
-        )}
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Aktive Prosjekter</CardTitle>
-              <Building2 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{projects.length}</div>
-              <p className="text-xs text-muted-foreground">
-                {projects.filter(p => p.status === 'active').length} aktive, {projects.filter(p => p.status === 'planning').length} planlegging
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Mengdelister</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">24</div>
-              <p className="text-xs text-muted-foreground">Denne måneden</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Kvalitetskontroller</CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">12</div>
-              <p className="text-xs text-muted-foreground">8 bestått, 4 venter</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Planlagte Møter</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">5</div>
-              <p className="text-xs text-muted-foreground">Neste 7 dager</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Main Dashboard */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="projects">Dashboard</TabsTrigger>
-            <TabsTrigger value="models" disabled={!selectedProject}>BIM Modeller</TabsTrigger>
-            <TabsTrigger value="production" disabled={!selectedProject}>Produksjon</TabsTrigger>
-            <TabsTrigger value="controls" disabled={!selectedProject}>Kontroller</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="admin">Admin</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="projects" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-slate-900">Dine Prosjekter</h3>
-              <ProjectCreationModal onProjectCreate={handleProjectCreate} />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {projects.map((project) => (
-                <Card 
-                  key={project.id} 
-                  className={`hover:shadow-lg transition-shadow cursor-pointer ${
-                    selectedProject === project.id ? 'ring-2 ring-blue-500 bg-blue-50' : ''
-                  }`}
-                  onClick={() => setSelectedProject(project.id)}
-                >
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <CardTitle className="text-lg">{project.name}</CardTitle>
-                      <Badge variant={project.status === 'active' ? 'default' : 'secondary'}>
-                        {project.status === 'active' ? 'Aktiv' : 'Planlegging'}
-                      </Badge>
-                    </div>
-                    <CardDescription>
-                      {project.description}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">Fremdrift</span>
-                        <span className="font-medium">{project.progress}%</span>
-                      </div>
-                      <div className="w-full bg-slate-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full ${
-                            project.progress >= 80 ? 'bg-green-600' : 
-                            project.progress >= 50 ? 'bg-blue-600' : 'bg-yellow-500'
-                          }`} 
-                          style={{ width: `${project.progress}%` }}
-                        ></div>
-                      </div>
-                      <div className="flex justify-between text-sm text-slate-600">
-                        <span>Team: {project.teamMembers.length} medlemmer</span>
-                        <span>{project.location}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="models" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-slate-900">BIM Modeller</h3>
-              {selectedProject && (
-                <div className="text-sm text-slate-600">
-                  Prosjekt: <span className="font-medium">{projects.find(p => p.id === selectedProject)?.name}</span>
-                </div>
-              )}
-            </div>
-            <ModelUpload selectedProject={selectedProject} />
-          </TabsContent>
-
-          <TabsContent value="production" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-slate-900">Produksjon</h3>
-              {selectedProject && (
-                <div className="text-sm text-slate-600">
-                  Prosjekt: <span className="font-medium">{projects.find(p => p.id === selectedProject)?.name}</span>
-                </div>
-              )}
-            </div>
-            <ProductionDashboard selectedProject={selectedProject} />
-          </TabsContent>
-
-          <TabsContent value="controls" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-slate-900">Kvalitetskontroller</h3>
-              {selectedProject && (
-                <div className="text-sm text-slate-600">
-                  Prosjekt: <span className="font-medium">{projects.find(p => p.id === selectedProject)?.name}</span>
-                </div>
-              )}
-            </div>
-            <QualityControlDashboard selectedProject={selectedProject} />
-          </TabsContent>
-
-          <TabsContent value="users" className="space-y-6">
-            <UserManagement />
-          </TabsContent>
-
-          <TabsContent value="admin" className="space-y-6">
-            <ProjectManagement 
-              selectedProject={selectedProject}
-              onProjectSelect={setSelectedProject}
-            />
-          </TabsContent>
-        </Tabs>
+          <aside className="card">
+            <div className="card-title">Hva blir BOB?</div>
+            <ul className="list">
+              <li>Digital assistent for mengder, kapplister og produksjonsgrunnlag.</li>
+              <li>St&oslash;tte for logistikk, 3PL og smartere leveranser til byggeplass.</li>
+              <li>Kravkontroll, kvalitetssikring og enkel oversikt over avvik.</li>
+              <li>Prosjektrom med tilgangsstyring for entrepren&oslash;r, r&aring;dgiver og byggherre.</li>
+            </ul>
+            <p className="small-text">
+              Denne siden er en forh&aring;ndsvisning av BOB-plattformen. Mer informasjon, demo og lanseringsplan kommer
+              etter hvert som utviklingen g&aring;r fremover.
+            </p>
+            <p className="small-text">
+              &Oslash;nsker du &aring; komme i kontakt om samarbeid, pilotprosjekter eller investering? Send en e-post til: 
+              <a href="mailto:andtheil@gmail.com">andtheil@gmail.com</a>
+            </p>
+          </aside>
+        </section>
       </main>
+
+      <footer className="landing-footer">
+        <span>BOB</span> er utviklet av Andreas Ludvigsen Theil &ndash; ALTBIM.
+      </footer>
+
+      <style jsx>{`
+        .landing-page {
+          min-height: 100vh;
+          background: radial-gradient(circle at top, #1f2937 0, #020617 45%, #000 100%);
+          color: #f9fafb;
+          display: flex;
+          flex-direction: column;
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          color-scheme: dark;
+          padding: 0 1.5rem 1.5rem;
+        }
+
+        .landing-header {
+          padding: 1.5rem 0 0.5rem;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          max-width: 1000px;
+          margin: 0 auto;
+          width: 100%;
+        }
+
+        .logo {
+          font-weight: 700;
+          letter-spacing: 0.12em;
+          font-size: 0.95rem;
+          text-transform: uppercase;
+        }
+
+        .logo span {
+          padding: 0.25rem 0.5rem;
+          border-radius: 999px;
+          border: 1px solid #4b5563;
+          font-size: 0.75rem;
+          margin-left: 0.5rem;
+          opacity: 0.85;
+        }
+
+        .login-button {
+          border: 1px solid #4b5563;
+          color: #e5e7eb;
+          background: rgba(15, 23, 42, 0.7);
+          padding: 0.55rem 1.1rem;
+          border-radius: 999px;
+          text-decoration: none;
+          font-size: 0.9rem;
+          transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .login-button:hover {
+          transform: translateY(-1px);
+          border-color: #22c55e;
+        }
+
+        .landing-main {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 2rem 0 3rem;
+        }
+
+        .hero {
+          max-width: 1000px;
+          width: 100%;
+          display: grid;
+          grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+          gap: 3rem;
+          align-items: center;
+        }
+
+        @media (max-width: 800px) {
+          .hero {
+            grid-template-columns: minmax(0, 1fr);
+            text-align: left;
+          }
+          .landing-header {
+            padding-inline: 0.5rem;
+          }
+        }
+
+        .pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.25rem 0.75rem;
+          border-radius: 999px;
+          border: 1px solid #4b5563;
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          letter-spacing: 0.14em;
+          color: #e5e7eb;
+          margin-bottom: 1.25rem;
+        }
+
+        .pill-dot {
+          width: 0.5rem;
+          height: 0.5rem;
+          border-radius: 999px;
+          background: #22c55e;
+          box-shadow: 0 0 12px rgba(34, 197, 94, 0.7);
+        }
+
+        h1 {
+          font-size: clamp(2.2rem, 5vw, 3.2rem);
+          line-height: 1.1;
+          margin: 0 0 1rem;
+        }
+
+        h1 span {
+          display: block;
+          background: linear-gradient(120deg, #22c55e, #38bdf8, #a855f7);
+          -webkit-background-clip: text;
+          color: transparent;
+        }
+
+        .lead {
+          font-size: 1rem;
+          line-height: 1.6;
+          color: #d1d5db;
+          margin-bottom: 1.5rem;
+          max-width: 34rem;
+        }
+
+        .tagline {
+          font-size: 0.9rem;
+          color: #9ca3af;
+          margin-bottom: 1.75rem;
+        }
+
+        .actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.75rem;
+          align-items: center;
+          margin-bottom: 2rem;
+        }
+
+        .btn-primary,
+        .btn-ghost {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0.7rem 1.3rem;
+          border-radius: 999px;
+          font-size: 0.9rem;
+          border: 1px solid transparent;
+          text-decoration: none;
+          white-space: nowrap;
+          color: #020617;
+          font-weight: 600;
+        }
+
+        .btn-primary {
+          background: linear-gradient(135deg, #22c55e, #16a34a);
+          box-shadow: 0 18px 40px rgba(22, 163, 74, 0.35);
+        }
+
+        .btn-ghost {
+          border-color: #4b5563;
+          color: #e5e7eb;
+          background: rgba(15, 23, 42, 0.7);
+          font-weight: 500;
+        }
+
+        .btn-link {
+          color: #22c55e;
+          text-decoration: none;
+          font-weight: 600;
+          padding: 0.7rem 1rem;
+        }
+
+        .btn-link:hover {
+          text-decoration: underline;
+        }
+
+        .meta {
+          font-size: 0.78rem;
+          text-transform: uppercase;
+          letter-spacing: 0.2em;
+          color: #6b7280;
+        }
+
+        .meta strong {
+          color: #e5e7eb;
+          font-weight: 600;
+        }
+
+        .card {
+          border-radius: 1.25rem;
+          border: 1px solid rgba(55, 65, 81, 0.9);
+          background: radial-gradient(circle at top, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.97));
+          padding: 1.5rem 1.6rem;
+          box-shadow: 0 24px 60px rgba(15, 23, 42, 0.9);
+        }
+
+        .card-title {
+          font-size: 0.95rem;
+          text-transform: uppercase;
+          letter-spacing: 0.16em;
+          color: #9ca3af;
+          margin-bottom: 1rem;
+        }
+
+        .list {
+          list-style: none;
+          padding: 0;
+          margin: 0 0 1.5rem;
+          display: grid;
+          gap: 0.6rem;
+          font-size: 0.9rem;
+          color: #e5e7eb;
+        }
+
+        .list li::before {
+          content: "•";
+          margin-right: 0.4rem;
+          color: #22c55e;
+        }
+
+        .small-text {
+          font-size: 0.8rem;
+          color: #9ca3af;
+          line-height: 1.5;
+        }
+
+        .small-text a {
+          color: #22c55e;
+          text-decoration: none;
+        }
+
+        .small-text a:hover {
+          text-decoration: underline;
+        }
+
+        .landing-footer {
+          font-size: 0.75rem;
+          color: #6b7280;
+          text-align: center;
+          margin-top: auto;
+          padding-top: 0.75rem;
+        }
+
+        .landing-footer span {
+          color: #e5e7eb;
+        }
+      `}</style>
     </div>
   );
 }
