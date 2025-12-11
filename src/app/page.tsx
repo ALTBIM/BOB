@@ -1,4 +1,6 @@
-﻿export default function LandingPage() {
+﻿"use client";
+
+export default function LandingPage() {
   return (
     <div className="landing-page">
       <header className="landing-header">
@@ -322,3 +324,4 @@
     </div>
   );
 }
+
