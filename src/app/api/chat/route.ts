@@ -1,12 +1,13 @@
 ﻿import { NextResponse } from "next/server";
 
-export const runtime = "edge";
+// Bruk node runtime for a unngaa edge-advarsel om statisk generering
+export const runtime = "nodejs";
 
 const systemPrompt = `
 Du er BOB, en faglig assistent for bygg og anlegg.
-Svar kort og praktisk. Struktur: Konklusjon først, deretter grunnlag/kilder/antakelser og konkrete anbefalinger.
-Når kilder mangler, si hva du antar og hva du trenger (f.eks. IFC/PDF/krav).
-Ikke hallusiner: merk antakelser tydelig. Tone: profesjonell, presis, løsningsorientert.
+Svar kort og praktisk. Struktur: Konklusjon forst, deretter grunnlag/kilder/antakelser og konkrete anbefalinger.
+Nar kilder mangler, si hva du antar og hva du trenger (f.eks. IFC/PDF/krav).
+Ikke hallusiner: merk antakelser tydelig. Tone: profesjonell, presis, losningsorientert.
 `;
 
 export async function POST(request: Request) {
@@ -20,9 +21,13 @@ export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "OPENAI_API_KEY mangler. Sett den i miljøvariabler." },
+      { error: "OPENAI_API_KEY mangler. Sett den i miljoevariabler." },
       { status: 500 }
     );
+  }
+
+  if (!message.trim()) {
+    return NextResponse.json({ error: "Melding mangler." }, { status: 400 });
   }
 
   const memoryText = memory.length
@@ -34,14 +39,14 @@ export async function POST(request: Request) {
       ? "Svar detaljert med metode/forutsetninger."
       : "Svar kortfattet.";
 
-  const sourcesText = sources ? "Hvis mulig: foreslå kilder/utdrag som trengs." : "Ikke etterspør kilder.";
+  const sourcesText = sources ? "Hvis mulig: foreslaa kilder/utdrag som trengs." : "Ikke etterspor kilder.";
 
   const userPrompt = `
 Prosjekt: ${projectId || "ukjent"}
 ${memoryText}
 Modus: ${modeText} ${sourcesText}
 Bruker sier: ${message}
-Gi konklusjon først, deretter grunnlag/antakelser og anbefalinger.`;
+Gi konklusjon forst, deretter grunnlag/antakelser og anbefalinger.`;
 
   const openAiPayload = {
     model: "gpt-4o-mini",
@@ -55,25 +60,31 @@ Gi konklusjon først, deretter grunnlag/antakelser og anbefalinger.`;
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(openAiPayload),
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(openAiPayload),
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: `OpenAI-foresporsel feilet: ${err?.message || err}` }, { status: 500 });
+  }
 
   if (!response.ok || !response.body) {
+    const text = await response.text();
     return NextResponse.json(
-      { error: "Klarte ikke å hente svar fra OpenAI." },
+      { error: "OpenAI svarte ikke OK", status: response.status, body: text },
       { status: 500 }
     );
   }
 
   const stream = new ReadableStream({
     async start(controller) {
-      const reader = response.body!.getReader();
+      const reader = response!.body!.getReader();
       let buffer = "";
       try {
         while (true) {
@@ -98,7 +109,7 @@ Gi konklusjon først, deretter grunnlag/antakelser og anbefalinger.`;
                 controller.enqueue(encoder.encode(`data: ${delta}\n\n`));
               }
             } catch (err) {
-              // ignore parse errors
+              // ignorer parse-feil
             }
           }
         }
