@@ -169,9 +169,7 @@ export default function HomePage() {
             Velkommen til BOB
           </h2>
           <p className="text-lg text-slate-600 max-w-3xl">
-            Ditt digitale verkt++y for byggeprosjekter som kobler BIM-modeller direkte til produksjon, 
-            logistikk og prosjektstyring. Generer mengdelister, lag arbeidstegninger, 
-            og administrer kvalitetskontroller p+� ett sted.
+            Ditt digitale verktoy for byggeprosjekter som kobler BIM-modeller direkte til produksjon, logistikk og prosjektstyring. Generer mengdelister, lag arbeidstegninger, og administrer kvalitetskontroller pa ett sted.
           </p>
         </div>
 
@@ -182,7 +180,7 @@ export default function HomePage() {
               <p className="text-yellow-800 font-medium">Ingen prosjekt valgt</p>
             </div>
             <p className="text-yellow-700 text-sm mt-1">
-              Velg et prosjekt fra dropdown-menyen ++verst for +� f+� tilgang til BIM-modeller, produksjonsverkt++y og kontroller.
+              Velg et prosjekt fra dropdown-menyen over for aa fa tilgang til BIM-modeller, produksjonsverktoy og kontroller.
             </p>
           </div>
         )}
@@ -208,7 +206,7 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">24</div>
-              <p className="text-xs text-muted-foreground">Denne m+�neden</p>
+              <p className="text-xs text-muted-foreground">Denne m+╤neden</p>
             </CardContent>
           </Card>
           <Card>
@@ -218,7 +216,7 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">12</div>
-              <p className="text-xs text-muted-foreground">8 best+�tt, 4 venter</p>
+              <p className="text-xs text-muted-foreground">8 best+╤tt, 4 venter</p>
             </CardContent>
           </Card>
           <Card>
@@ -347,4 +345,5 @@ export default function HomePage() {
     </div>
   );
 }
+
 
