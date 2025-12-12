@@ -12,6 +12,7 @@ import { FileText, Download, Calculator, Building2, Image, CheckCircle, Trash2 }
 import { db, BIMModel } from "@/lib/database";
 import { getAvailableMaterialsForModel, recordModelMaterials } from "@/lib/material-store";
 import { parseIfcFile } from "@/lib/ifc-parser";
+import { IfcViewerPanel } from "./IfcViewerPanel";
 
 interface ProductionDashboardProps {
   selectedProject: string | null;
@@ -167,7 +168,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                       materials: materials.length,
                     };
                     persistModelToStore(completedFile, materials);
-                    setExistingFiles((existing) => [...existing, { ...completedFile, rawFile: undefined }]);
+                    setExistingFiles((existing) => [...existing, { ...completedFile }]);
                     return completedFile;
                   })
                 );
@@ -670,23 +671,27 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="text-sm text-slate-600">
-                    Genererer en enkel SVG med sone- og objektoppsummering (placeholder). Full geometri krever videre
-                    integrasjon (web-ifc-three/IFC.js).
+                  <div className="text-sm text-slate-600 space-y-1">
+                    <p>1) Last ned enkel SVG tegning (mock)</p>
+                    <Button onClick={generateDrawingSvg} disabled={isDrawingExporting || !selectedModel}>
+                      {isDrawingExporting ? (
+                        <>
+                          <Image className="w-4 h-4 mr-2 animate-spin" />
+                          Genererer SVG...
+                        </>
+                      ) : (
+                        <>
+                          <Image className="w-4 h-4 mr-2" />
+                          Last ned enkel tegning (SVG)
+                        </>
+                      )}
+                    </Button>
+                    <p className="pt-2">2) Se geometri (eksperimentell web-ifc viewer)</p>
+                    <IfcViewerPanel
+                      file={existingFiles.find((f) => f.id === selectedModel)?.rawFile}
+                      modelName={availableModels.find((m) => m.id === selectedModel)?.name}
+                    />
                   </div>
-                  <Button onClick={generateDrawingSvg} disabled={isDrawingExporting || !selectedModel}>
-                    {isDrawingExporting ? (
-                      <>
-                        <Image className="w-4 h-4 mr-2 animate-spin" />
-                        Genererer SVG...
-                      </>
-                    ) : (
-                      <>
-                        <Image className="w-4 h-4 mr-2" />
-                        Last ned enkel tegning (SVG)
-                      </>
-                    )}
-                  </Button>
                 </>
               )}
             </CardContent>
