@@ -34,6 +34,7 @@ const docsFile = path.join(dataDir, "rag-docs.json");
 let cachedDocs: SourceDocument[] | null = null;
 let dbPool: Pool | null = null;
 let dbReady = false;
+let lastBackend: "db" | "file" = "file";
 
 async function ensureDocsFile() {
   try {
@@ -64,10 +65,12 @@ async function getDb(): Promise<Pool | null> {
       );
     `);
     dbReady = true;
+    lastBackend = "db";
     return dbPool;
   } catch (err) {
     console.error("Kunne ikke koble til DATABASE_URL, bruker fil-lagring", err);
     dbPool = null;
+    lastBackend = "file";
     return null;
   }
 }
@@ -96,6 +99,7 @@ async function loadDocs(): Promise<SourceDocument[]> {
       }));
     } catch (err) {
       console.error("Kunne ikke lese RAG-dokumenter fra DB, faller tilbake til fil", err);
+      lastBackend = "file";
     }
   }
 
@@ -234,4 +238,15 @@ export async function retrieveContext(
     : "Ingen prosjektkilder funnet.";
 
   return { sources, contextText };
+}
+
+export async function getRagStatus() {
+  const docs = await loadDocs();
+  const backend = lastBackend;
+  const count = docs.length;
+  return {
+    backend,
+    docCount: count,
+    dbReady: backend === "db",
+  };
 }

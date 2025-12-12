@@ -13,6 +13,7 @@ import { db, BIMModel } from "@/lib/database";
 import { getAvailableMaterialsForModel, recordModelMaterials } from "@/lib/material-store";
 import { parseIfcFile } from "@/lib/ifc-parser";
 import { IfcViewerPanel } from "./IfcViewerPanel";
+import { getMaterialsForModel, saveIfcMetadata } from "@/lib/ifc-store";
 
 interface ProductionDashboardProps {
   selectedProject: string | null;
@@ -78,13 +79,18 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   useEffect(() => {
     if (selectedProject && selectedModel) {
-      const materials = getAvailableMaterialsForModel(selectedProject, selectedModel);
-      if (materials.length === 0) {
-        setAvailableMaterials(fallbackMaterials);
-      } else {
-        setAvailableMaterials(materials);
-      }
-      setSelectedMaterials([]);
+      (async () => {
+        // Prøv først DB-lagret materialer
+        const dbMaterials = await getMaterialsForModel(selectedProject, selectedModel);
+        const inMemoryMaterials = getAvailableMaterialsForModel(selectedProject, selectedModel);
+        const materials = dbMaterials.length ? dbMaterials : inMemoryMaterials;
+        if (materials.length === 0) {
+          setAvailableMaterials(fallbackMaterials);
+        } else {
+          setAvailableMaterials(materials);
+        }
+        setSelectedMaterials([]);
+      })();
     } else {
       setAvailableMaterials([]);
       setSelectedMaterials([]);
@@ -206,6 +212,14 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         description: "IFC fil lastet opp i denne økten",
       });
       recordModelMaterials(file.projectId, created.id, materials);
+      await saveIfcMetadata({
+        modelId: created.id,
+        projectId: file.projectId,
+        name: file.name,
+        materials,
+        objects: file.objects,
+        zones: file.zones,
+      });
     } catch (error) {
       console.error("Kunne ikke lagre modell i database", error);
     }
