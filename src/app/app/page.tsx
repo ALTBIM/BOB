@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -115,7 +115,7 @@ export default function HomePage() {
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <Building2 className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-                <h1 className="text-2xl font-bold">BOB</h1>
+                <h1 className="text-2xl font-semibold tracking-tight">BOB</h1>
               </div>
               <Badge variant="secondary" className="text-xs">
                 BIM Operations & Building Management
@@ -242,7 +242,7 @@ export default function HomePage() {
             Velkommen til BOB
           </h2>
           <p className="text-lg text-muted-foreground max-w-3xl">
-            Ditt digitale verktøy for byggeprosjekter som kobler BIM-modeller direkte til produksjon, logistikk og prosjektstyring. Generer mengdelister, lag arbeidstegninger, og administrer kvalitetskontroller på ett sted.
+            Ditt digitale verktÃ¸y for byggeprosjekter som kobler BIM-modeller direkte til produksjon, logistikk og prosjektstyring. Generer mengdelister, lag arbeidstegninger, og administrer kvalitetskontroller pÃ¥ ett sted.
           </p>
         </div>
 
@@ -253,52 +253,52 @@ export default function HomePage() {
               <p className="text-amber-800 dark:text-amber-100 font-medium">Ingen prosjekt valgt</p>
             </div>
             <p className="text-amber-700 dark:text-amber-200 text-sm mt-1">
-              Velg et prosjekt fra dropdown-menyen over for å få tilgang til BIM-modeller, produksjonsverktøy og kontroller.
+              Velg et prosjekt fra dropdown-menyen over for Ã¥ fÃ¥ tilgang til BIM-modeller, produksjonsverktÃ¸y og kontroller.
             </p>
           </div>
         )}
 
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card>
+          <Card className="border border-border bg-card shadow-none">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Aktive Prosjekter</CardTitle>
+              <CardTitle className="text-sm font-medium">Aktive prosjekter</CardTitle>
               <Building2 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{projects.length}</div>
+              <div className="text-2xl font-semibold tracking-tight">{projects.length}</div>
               <p className="text-xs text-muted-foreground">
-                {projects.filter(p => p.status === 'active').length} aktive, {projects.filter(p => p.status === 'planning').length} planlegging
+                {projects.filter(p => p.status === "active").length} aktive, {projects.filter(p => p.status === "planning").length} planlegging
               </p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border border-border bg-card shadow-none">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Mengdelister</CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">24</div>
+              <div className="text-2xl font-semibold tracking-tight">24</div>
               <p className="text-xs text-muted-foreground">Denne måneden</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border border-border bg-card shadow-none">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Kvalitetskontroller</CardTitle>
               <CheckCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">12</div>
+              <div className="text-2xl font-semibold tracking-tight">12</div>
               <p className="text-xs text-muted-foreground">8 bestått, 4 venter</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border border-border bg-card shadow-none">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Planlagte møter</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">5</div>
+              <div className="text-2xl font-semibold tracking-tight">5</div>
               <p className="text-xs text-muted-foreground">Neste 7 dager</p>
             </CardContent>
           </Card>
@@ -323,10 +323,10 @@ export default function HomePage() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {projects.map((project) => (
-                <Card 
-                  key={project.id} 
-                  className={`hover:shadow-lg transition-shadow cursor-pointer ${
-                    selectedProject === project.id ? 'ring-2 ring-primary/60 bg-primary/5 dark:bg-primary/10' : ''
+                <Card
+                  key={project.id}
+                  className={`border border-border bg-card hover:shadow-sm transition-shadow cursor-pointer ${
+                    selectedProject === project.id ? "ring-1 ring-primary/60 bg-primary/5 dark:bg-primary/10" : ""
                   }`}
                   onClick={() => setSelectedProject(project.id)}
                 >
@@ -418,3 +418,4 @@ export default function HomePage() {
     </div>
   );
 }
+
