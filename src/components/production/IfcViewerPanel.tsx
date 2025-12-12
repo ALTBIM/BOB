@@ -6,9 +6,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 
 const WASM_CDN = "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/";
-const THREE_CDN = "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js";
-const IFC_LOADER_CDN =
-  "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/loaders/IFCLoader.js";
 
 type Props = {
   file?: File;
@@ -38,8 +35,8 @@ export function IfcViewerPanel({ file, modelName }: Props) {
 
     try {
       const [{ default: THREE }, { IFCLoader }] = await Promise.all([
-        import(/* webpackIgnore: true */ THREE_CDN),
-        import(/* webpackIgnore: true */ IFC_LOADER_CDN),
+        import("three"),
+        import("three/examples/jsm/loaders/IFCLoader.js"),
       ]);
 
       const width = containerRef.current.clientWidth || 640;
