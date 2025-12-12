@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { v4 as uuid } from "uuid";
 
-// Demo data inntil vi kobler paa backend/DB
 const demoConversations = [
   { id: "1", title: "Kravkontroll - TEK17", updatedAt: "12:03" },
   { id: "2", title: "Mengder for 3.etg", updatedAt: "11:40" },
@@ -81,33 +80,58 @@ export default function ChatPage() {
 
     setIsSending(true);
     try {
-      const res = await fetch("/api/chat", {
+      const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, projectId: "demo-project" }),
       });
-      if (!res.ok) throw new Error("Chat API feilet");
-      const data = await res.json();
-      const botMsg: ChatMessage = {
-        id: uuid(),
-        author: "bob",
-        content: data.reply ?? "Jeg har mottatt meldingen din.",
-        timestamp: toTime(),
-      };
-      setMessagesByConversation((prev) => ({
-        ...prev,
-        [activeConversationId]: [...(prev[activeConversationId] || []), botMsg],
-      }));
+
+      if (!response.ok || !response.body) throw new Error("Chat API feilet");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let botContent = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          if (part.startsWith("data: ")) {
+            const chunk = part.replace("data: ", "").trim();
+            botContent += (botContent ? "\n" : "") + chunk;
+            setMessagesByConversation((prev) => ({
+              ...prev,
+              [activeConversationId]: [
+                ...(prev[activeConversationId] || []),
+                {
+                  id: uuid(),
+                  author: "bob",
+                  content: chunk,
+                  timestamp: toTime(),
+                },
+              ],
+            }));
+          }
+        }
+      }
     } catch (err) {
-      const botMsg: ChatMessage = {
-        id: uuid(),
-        author: "bob",
-        content: "Kunne ikke hente svar naa. Proev igjen om litt.",
-        timestamp: toTime(),
-      };
       setMessagesByConversation((prev) => ({
         ...prev,
-        [activeConversationId]: [...(prev[activeConversationId] || []), botMsg],
+        [activeConversationId]: [
+          ...(prev[activeConversationId] || []),
+          {
+            id: uuid(),
+            author: "bob",
+            content: "Kunne ikke hente svar naa. Proev igjen om litt.",
+            timestamp: toTime(),
+          },
+        ],
       }));
     } finally {
       setIsSending(false);
@@ -211,12 +235,11 @@ export default function ChatPage() {
             </Button>
           </div>
           <p className="text-xs text-slate-500 mt-2">
-            BOB foreslaar neste steg og bruker prosjektets kontekst. Kilder vises naar dokumenter er koblet paa.
+            BOB foreslaar neste steg og bruker prosjektets kontekst. Kilder vises naar dokumenter er koblet på.
           </p>
         </footer>
       </section>
     </div>
   );
 }
-
 
