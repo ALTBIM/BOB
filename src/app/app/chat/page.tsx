@@ -1,59 +1,118 @@
-"use client";
+﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { MessageCircle, Search, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { v4 as uuid } from "uuid";
 
-type Conversation = {
-  id: string;
-  title: string;
-  updatedAt: string;
-};
-
-type ChatMessage = {
-  id: string;
-  author: "user" | "bob";
-  content: string;
-  timestamp: string;
-};
-
-const demoConversations: Conversation[] = [
-  { id: "1", title: "Kravkontroll – TEK17", updatedAt: "12:03" },
+// Demo data inntil vi kobler paa backend/DB
+const demoConversations = [
+  { id: "1", title: "Kravkontroll - TEK17", updatedAt: "12:03" },
   { id: "2", title: "Mengder for 3.etg", updatedAt: "11:40" },
   { id: "3", title: "Sjekk logistikkplan", updatedAt: "08:15" },
 ];
 
-const demoMessages: ChatMessage[] = [
+const demoMessages = [
   {
     id: "m1",
-    author: "user",
+    author: "user" as const,
     content: "Lag en sjekkliste for mottakskontroll av vinduer.",
     timestamp: "12:03",
   },
   {
     id: "m2",
-    author: "bob",
+    author: "bob" as const,
     content:
-      "Konklusjon: Jeg lager en sjekkliste for mottakskontroll av vinduer. Grunnlag: prosjektrolle entreprenør, krav: TEK17 §13-4, interne krav (QA-04), siste logistikkplan. Anbefalinger: bekreft leverandør og type før jeg genererer sjekkliste.",
+      "Konklusjon: Jeg lager en sjekkliste for mottakskontroll av vinduer. Grunnlag: prosjektrolle entreprenoer, krav: TEK17 paragraf 13-4, interne krav (QA-04), siste logistikkplan. Anbefalinger: bekreft leverandoer og type foer jeg genererer sjekkliste.",
     timestamp: "12:04",
   },
   {
     id: "m3",
-    author: "bob",
+    author: "bob" as const,
     content:
-      "Forslag til neste steg: 1) Bekreft vindustype/leverandør. 2) Jeg genererer sjekkliste med kilder. 3) Opprett avvikslogg hvis noe mangler.",
+      "Forslag til neste steg: 1) Bekreft vindustype/leverandoer. 2) Jeg genererer sjekkliste med kilder. 3) Opprett avvikslogg hvis noe mangler.",
     timestamp: "12:04",
   },
 ];
 
+type Conversation = (typeof demoConversations)[number];
+type ChatMessage = (typeof demoMessages)[number];
+
+function toTime() {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 export default function ChatPage() {
   const [activeConversationId, setActiveConversationId] = useState("1");
   const [input, setInput] = useState("");
+  const [messagesByConversation, setMessagesByConversation] = useState<Record<string, ChatMessage[]>>({
+    "1": demoMessages,
+    "2": [],
+    "3": [],
+  });
+  const [isSending, setIsSending] = useState(false);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  const messages = useMemo(() => demoMessages, []);
   const conversations = useMemo(() => demoConversations, []);
+  const messages = messagesByConversation[activeConversationId] || [];
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
+
+  const handleSend = async () => {
+    const text = input.trim();
+    if (!text) return;
+    setInput("");
+
+    const userMsg: ChatMessage = {
+      id: uuid(),
+      author: "user",
+      content: text,
+      timestamp: toTime(),
+    };
+
+    setMessagesByConversation((prev) => ({
+      ...prev,
+      [activeConversationId]: [...(prev[activeConversationId] || []), userMsg],
+    }));
+
+    setIsSending(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, projectId: "demo-project" }),
+      });
+      if (!res.ok) throw new Error("Chat API feilet");
+      const data = await res.json();
+      const botMsg: ChatMessage = {
+        id: uuid(),
+        author: "bob",
+        content: data.reply ?? "Jeg har mottatt meldingen din.",
+        timestamp: toTime(),
+      };
+      setMessagesByConversation((prev) => ({
+        ...prev,
+        [activeConversationId]: [...(prev[activeConversationId] || []), botMsg],
+      }));
+    } catch (err) {
+      const botMsg: ChatMessage = {
+        id: uuid(),
+        author: "bob",
+        content: "Kunne ikke hente svar naa. Proev igjen om litt.",
+        timestamp: toTime(),
+      };
+      setMessagesByConversation((prev) => ({
+        ...prev,
+        [activeConversationId]: [...(prev[activeConversationId] || []), botMsg],
+      }));
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 min-h-[80vh]">
@@ -69,10 +128,7 @@ export default function ChatPage() {
         <div className="mt-3">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Søk i samtaler..."
-              className="pl-9 text-sm"
-            />
+            <Input placeholder="Soek i samtaler..." className="pl-9 text-sm" />
           </div>
         </div>
 
@@ -122,20 +178,17 @@ export default function ChatPage() {
             <div
               key={m.id}
               className={`max-w-3xl rounded-lg px-4 py-3 ${
-                m.author === "user"
-                  ? "bg-white border border-slate-200 ml-auto shadow-sm"
-                  : "bg-slate-900 text-white"
+                m.author === "user" ? "bg-white border border-slate-200 ml-auto shadow-sm" : "bg-slate-900 text-white"
               }`}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs uppercase tracking-wide opacity-70">
-                  {m.author === "user" ? "Du" : "BOB"}
-                </span>
+                <span className="text-xs uppercase tracking-wide opacity-70">{m.author === "user" ? "Du" : "BOB"}</span>
                 <span className="text-xs opacity-60">{m.timestamp}</span>
               </div>
               <p className="text-sm leading-relaxed">{m.content}</p>
             </div>
           ))}
+          <div ref={bottomRef} />
         </div>
 
         <footer className="border-t border-slate-200 p-4">
@@ -145,17 +198,25 @@ export default function ChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               className="flex-1"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (!isSending) handleSend();
+                }
+              }}
             />
-            <Button type="button" disabled={!input.trim()}>
+            <Button type="button" disabled={!input.trim() || isSending} onClick={handleSend}>
               <Send className="h-4 w-4 mr-2" />
-              Send
+              {isSending ? "Sender..." : "Send"}
             </Button>
           </div>
           <p className="text-xs text-slate-500 mt-2">
-            BOB foreslår neste steg og bruker prosjektets kontekst. Kilder vises når dokumenter er koblet på.
+            BOB foreslaar neste steg og bruker prosjektets kontekst. Kilder vises naar dokumenter er koblet paa.
           </p>
         </footer>
       </section>
     </div>
   );
 }
+
+
