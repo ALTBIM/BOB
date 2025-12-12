@@ -43,6 +43,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedList, setGeneratedList] = useState<QuantityList | null>(null);
+  const fallbackMaterials = ["betong", "stal", "tre", "glass", "gips", "isolasjon"];
 
   useEffect(() => {
     if (selectedProject) {
@@ -56,7 +57,12 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   useEffect(() => {
     if (selectedProject && selectedModel) {
       const materials = getAvailableMaterialsForModel(selectedProject, selectedModel);
-      setAvailableMaterials(materials);
+      if (materials.length === 0) {
+        // Midlertidig fallback til mock-materialer når IFC-parsing ikke finnes
+        setAvailableMaterials(fallbackMaterials);
+      } else {
+        setAvailableMaterials(materials);
+      }
       setSelectedMaterials([]);
     } else {
       setAvailableMaterials([]);
@@ -80,8 +86,12 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     }
   };
 
-  const generateQuantityList = async (type: "quantities" | "drawings" | "control") => {
-    if (!selectedModel || selectedMaterials.length === 0) {
+  const generateQuantityList = async (
+    type: "quantities" | "drawings" | "control",
+    materialsOverride?: string[]
+  ) => {
+    const materials = materialsOverride ?? selectedMaterials;
+    if (!selectedModel || materials.length === 0) {
       alert("Velg modell og materialer først");
       return;
     }
@@ -89,14 +99,17 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     setIsGenerating(true);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 600));
 
       const items: QuantityItem[] = [];
       let totalQuantity = 0;
       let unit = "stk";
 
-      selectedMaterials.forEach((materialType) => {
-        const quantity = Math.round((Math.random() * 10 + 1) * 100) / 100;
+      materials.forEach((materialType, idx) => {
+        // Mock-beregning: bruk objekttall som grovt grunnlag hvis tilgjengelig
+        const base = availableModels.find((m) => m.id === selectedModel)?.objects ?? 10;
+        const spread = (base / (materials.length + idx + 5)) * 0.01;
+        const quantity = Math.round((Math.random() * 2 + spread) * 100) / 100;
         items.push({
           id: `item-${materialType}-${selectedModel}`,
           description: `${materialType} - Hele modellen`,
@@ -104,14 +117,16 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
           unit,
           zone: "Hele modellen",
           material: materialType,
-          notes: "Forenklet beregning basert på tilgjengelige materialer",
+          notes: "Forenklet beregning basert på tilgjengelige materialer (mock, ingen ekte IFC-parsing enda)",
         });
         totalQuantity += quantity;
       });
 
       const list: QuantityList = {
         id: `list-${Date.now()}`,
-        name: `${type === "quantities" ? "Mengdeliste" : type === "drawings" ? "Tegningsproduksjon" : "Modellkontroll"} - ${new Date().toLocaleDateString("no-NO")}`,
+        name: `${
+          type === "quantities" ? "Mengdeliste" : type === "drawings" ? "Tegningsproduksjon" : "Modellkontroll"
+        } - ${new Date().toLocaleDateString("no-NO")}`,
         type,
         items,
         totalQuantity: Math.round(totalQuantity * 100) / 100,
@@ -120,12 +135,24 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       };
 
       setGeneratedList(list);
+      if (materialsOverride) {
+        setSelectedMaterials(materialsOverride);
+      }
     } catch (error) {
       console.error("Failed to generate list:", error);
       alert("Feil ved generering av liste");
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleFullExtraction = () => {
+    if (!selectedModel) {
+      alert("Velg modell først");
+      return;
+    }
+    const sourceMaterials = availableMaterials.length > 0 ? availableMaterials : fallbackMaterials;
+    generateQuantityList("quantities", sourceMaterials);
   };
 
   const downloadList = (format: "csv" | "excel" | "pdf") => {
@@ -246,14 +273,29 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">Velg materialer</CardTitle>
-                      <CardDescription>Materialer fra valgt IFC-modell</CardDescription>
+                      <CardDescription>Materialer fra valgt IFC-modell (mock til vi parser IFC)</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {availableMaterials.length === 0 && (
                         <p className="text-sm text-slate-600">
-                          Ingen materialer er tilgjengelige ennå for denne modellen. Sørg for at IFC-filen er prosessert.
+                          Ingen materialer er tilgjengelige ennå for denne modellen. Bruk “Fullt uttrekk” for mock-data.
                         </p>
                       )}
+
+                      {availableMaterials.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setSelectedMaterials(availableMaterials)}>
+                            Velg alle materialer
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setSelectedMaterials([])}>
+                            Nullstill
+                          </Button>
+                          <Button variant="secondary" size="sm" onClick={handleFullExtraction}>
+                            Fullt uttrekk (alle materialer)
+                          </Button>
+                        </div>
+                      )}
+
                       {availableMaterials.map((material) => (
                         <div key={material} className="flex items-center space-x-3 p-2 rounded hover:bg-slate-50">
                           <Checkbox
@@ -277,9 +319,13 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                 </div>
               )}
 
-              {selectedModel && selectedMaterials.length > 0 && (
-                <div className="flex justify-center">
-                  <Button onClick={() => generateQuantityList("quantities")} disabled={isGenerating} size="lg">
+              {selectedModel && (
+                <div className="flex flex-wrap justify-center gap-3">
+                  <Button
+                    onClick={() => generateQuantityList("quantities")}
+                    disabled={isGenerating || selectedMaterials.length === 0}
+                    size="lg"
+                  >
                     {isGenerating ? (
                       <>
                         <Calculator className="w-4 h-4 mr-2 animate-spin" />
@@ -291,6 +337,14 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                         Generer Mengdeliste
                       </>
                     )}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={handleFullExtraction}
+                    disabled={isGenerating}
+                    size="lg"
+                  >
+                    Fullt uttrekk (alle materialer)
                   </Button>
                 </div>
               )}
@@ -304,7 +358,8 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                   <div>
                     <CardTitle>{generatedList.name}</CardTitle>
                     <CardDescription>
-                      {generatedList.items.length} posisjoner • Total: {generatedList.totalQuantity} {generatedList.unit}
+                      {generatedList.items.length} posisjoner • Total: {generatedList.totalQuantity}{" "}
+                      {generatedList.unit}
                     </CardDescription>
                   </div>
                   <div className="flex space-x-2">
