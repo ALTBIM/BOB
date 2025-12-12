@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { Pool } from "pg";
 
 export type SourceDocument = {
   id: string;
@@ -31,6 +32,8 @@ const dataDir = path.join(process.cwd(), "data");
 const docsFile = path.join(dataDir, "rag-docs.json");
 
 let cachedDocs: SourceDocument[] | null = null;
+let dbPool: Pool | null = null;
+let dbReady = false;
 
 async function ensureDocsFile() {
   try {
@@ -41,7 +44,61 @@ async function ensureDocsFile() {
   }
 }
 
+async function getDb(): Promise<Pool | null> {
+  if (dbReady && dbPool) return dbPool;
+  const url = process.env.DATABASE_URL;
+  if (!url) return null;
+  try {
+    dbPool = new Pool({ connectionString: url });
+    await dbPool.query("SELECT 1");
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS rag_documents (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        discipline TEXT NOT NULL,
+        zone TEXT,
+        reference TEXT NOT NULL,
+        text TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+    dbReady = true;
+    return dbPool;
+  } catch (err) {
+    console.error("Kunne ikke koble til DATABASE_URL, bruker fil-lagring", err);
+    dbPool = null;
+    return null;
+  }
+}
+
 async function loadDocs(): Promise<SourceDocument[]> {
+  const db = await getDb();
+  if (db) {
+    try {
+      const res = await db.query<{
+        id: string;
+        project_id: string;
+        title: string;
+        discipline: string;
+        zone: string | null;
+        reference: string;
+        text: string;
+      }>("SELECT id, project_id, title, discipline, zone, reference, text FROM rag_documents");
+      return res.rows.map((r) => ({
+        id: r.id,
+        projectId: r.project_id,
+        title: r.title,
+        discipline: r.discipline,
+        zone: r.zone || undefined,
+        reference: r.reference,
+        text: r.text,
+      }));
+    } catch (err) {
+      console.error("Kunne ikke lese RAG-dokumenter fra DB, faller tilbake til fil", err);
+    }
+  }
+
   if (cachedDocs) return cachedDocs;
   await ensureDocsFile();
   try {
@@ -50,12 +107,43 @@ async function loadDocs(): Promise<SourceDocument[]> {
     cachedDocs = parsed;
     return parsed;
   } catch (err) {
-    console.error("Kunne ikke lese RAG-dokumenter", err);
+    console.error("Kunne ikke lese RAG-dokumenter fra fil", err);
     return [];
   }
 }
 
 async function persistDocs(docs: SourceDocument[]) {
+  const db = await getDb();
+  if (db) {
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      for (const doc of docs) {
+        await client.query(
+          `
+            INSERT INTO rag_documents (id, project_id, title, discipline, zone, reference, text)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (id) DO UPDATE SET
+              project_id = excluded.project_id,
+              title = excluded.title,
+              discipline = excluded.discipline,
+              zone = excluded.zone,
+              reference = excluded.reference,
+              text = excluded.text;
+          `,
+          [doc.id, doc.projectId, doc.title, doc.discipline, doc.zone || null, doc.reference, doc.text]
+        );
+      }
+      await client.query("COMMIT");
+      return;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      console.error("Kunne ikke lagre RAG-dokumenter til DB, faller tilbake til fil", err);
+    } finally {
+      client.release();
+    }
+  }
+
   cachedDocs = docs;
   await ensureDocsFile();
   await fs.writeFile(docsFile, JSON.stringify(docs, null, 2), "utf-8");
