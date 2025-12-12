@@ -1,4 +1,4 @@
-"use client";
+ï»¿"use client";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -171,7 +171,7 @@ export default function HomePage() {
           <p className="text-lg text-slate-600 max-w-3xl">
             Ditt digitale verkt++y for byggeprosjekter som kobler BIM-modeller direkte til produksjon, 
             logistikk og prosjektstyring. Generer mengdelister, lag arbeidstegninger, 
-            og administrer kvalitetskontroller p+Ñ ett sted.
+            og administrer kvalitetskontroller p+ï¿½ ett sted.
           </p>
         </div>
 
@@ -182,7 +182,7 @@ export default function HomePage() {
               <p className="text-yellow-800 font-medium">Ingen prosjekt valgt</p>
             </div>
             <p className="text-yellow-700 text-sm mt-1">
-              Velg et prosjekt fra dropdown-menyen ++verst for +Ñ f+Ñ tilgang til BIM-modeller, produksjonsverkt++y og kontroller.
+              Velg et prosjekt fra dropdown-menyen ++verst for +ï¿½ f+ï¿½ tilgang til BIM-modeller, produksjonsverkt++y og kontroller.
             </p>
           </div>
         )}
@@ -208,7 +208,7 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">24</div>
-              <p className="text-xs text-muted-foreground">Denne m+Ñneden</p>
+              <p className="text-xs text-muted-foreground">Denne m+ï¿½neden</p>
             </CardContent>
           </Card>
           <Card>
@@ -218,7 +218,7 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">12</div>
-              <p className="text-xs text-muted-foreground">8 best+Ñtt, 4 venter</p>
+              <p className="text-xs text-muted-foreground">8 best+ï¿½tt, 4 venter</p>
             </CardContent>
           </Card>
           <Card>
