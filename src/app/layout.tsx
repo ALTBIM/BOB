@@ -16,10 +16,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="no" suppressHydrationWarning>
+      <body className={`${inter.className} bg-background text-foreground`}>
         <Providers>
-          <div className="min-h-screen bg-slate-50">
+          <div className="min-h-screen">
             {children}
           </div>
         </Providers>

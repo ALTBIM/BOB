@@ -7,7 +7,17 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building2, Users, FileText, CheckCircle, Calendar, Settings, Search, AlertTriangle } from "lucide-react";
+import {
+  Building2,
+  Users,
+  FileText,
+  CheckCircle,
+  Calendar,
+  Settings,
+  Search,
+  AlertTriangle,
+  ChevronDown,
+} from "lucide-react";
 import LoginForm from "@/components/auth/LoginForm";
 import ProjectCreationModal from "@/components/projects/ProjectCreationModal";
 import ModelUpload from "@/components/bim/ModelUpload";
@@ -17,6 +27,15 @@ import UserManagement from "@/components/auth/UserManagement";
 import ProjectManagement from "@/components/admin/ProjectManagement";
 import { User, Project, db, getRoleDisplayName } from "@/lib/database";
 import { useSession } from "@/lib/session";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function HomePage() {
   const { user, ready, login, logout } = useSession();
@@ -70,26 +89,33 @@ export default function HomePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading...</p>
+          <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>
     );
   }
 
+  const userInitials = user.name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 shadow-sm">
+      <header className="sticky top-0 z-30 border-b border-border/80 bg-card/80 backdrop-blur-md supports-[backdrop-filter]:bg-card/70">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex justify-between items-center h-16 gap-4">
             {/* Left - Logo */}
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <Building2 className="h-8 w-8 text-blue-600" />
-                <h1 className="text-2xl font-bold text-slate-900">BOB</h1>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                <h1 className="text-2xl font-bold">BOB</h1>
               </div>
               <Badge variant="secondary" className="text-xs">
                 BIM Operations & Building Management
@@ -97,23 +123,22 @@ export default function HomePage() {
             </div>
 
             {/* Center - Search */}
-            <div className="flex-1 max-w-md mx-8">
+            <div className="flex-1 max-w-xl mx-6 hidden md:block">
               <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Sok prosjekter, brukere, filer..."
-                  className="pl-10"
+                  placeholder="Søk prosjekter, brukere, filer..."
+                  className="pl-10 bg-muted/40 border-border/70"
                 />
               </div>
             </div>
 
             {/* Right - Project selector + User menu */}
-            <div className="flex items-center space-x-4">
-              {/* PROJECT SELECTOR DROPDOWN */}
-              <div className="flex items-center space-x-2">
-                <span className="text-sm font-medium text-slate-700">Prosjekt:</span>
+            <div className="flex items-center gap-3">
+              <div className="hidden lg:flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">Prosjekt:</span>
                 <Select value={selectedProject || ""} onValueChange={setSelectedProject}>
-                  <SelectTrigger className="w-64">
+                  <SelectTrigger className="w-64 bg-background border-border">
                     <SelectValue placeholder="Velg prosjekt...">
                       {selectedProject && projects.find(p => p.id === selectedProject)?.name}
                     </SelectValue>
@@ -134,28 +159,76 @@ export default function HomePage() {
                 </Select>
               </div>
 
-              <Button variant="outline" size="sm" onClick={() => setActiveTab("users")}>
-                <Users className="w-4 h-4 mr-2" />
-                Users
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setActiveTab("admin")}>
-                <Settings className="w-4 h-4 mr-2" />
-                Admin
-              </Button>
-              <div className="flex items-center gap-3 min-w-[200px] justify-end">
-                <div className="text-right leading-tight">
-                  <p className="text-sm font-medium text-slate-900">{user.name}</p>
-                  <p className="text-xs text-slate-600">{getRoleDisplayName(user.role)} - {user.company}</p>
-                </div>
-                <div className="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">
-                    {user.name.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <Button variant="outline" size="sm" onClick={handleLogout}>
-                  Logout
+              <div className="hidden sm:flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setActiveTab("users")}>
+                  <Users className="w-4 h-4 mr-2" />
+                  Users
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setActiveTab("admin")}>
+                  <Settings className="w-4 h-4 mr-2" />
+                  Admin
                 </Button>
               </div>
+
+              <ThemeToggle />
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="flex items-center gap-3 rounded-full border-border bg-card/90 px-3 h-11 shadow-sm"
+                  >
+                    <div className="hidden sm:flex flex-col items-start leading-tight">
+                      <span className="text-sm font-semibold">{user.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {getRoleDisplayName(user.role)} · {user.company}
+                      </span>
+                    </div>
+                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-blue-600 to-indigo-500 text-white flex items-center justify-center text-sm font-semibold">
+                      {userInitials || user.name.charAt(0).toUpperCase()}
+                    </div>
+                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel>
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-500 text-white flex items-center justify-center text-sm font-semibold">
+                        {userInitials || user.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="font-semibold leading-tight">{user.name}</div>
+                        <div className="text-xs text-muted-foreground leading-tight">{user.email || "Bruker"}</div>
+                      </div>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="flex flex-col items-start">
+                    <span className="text-sm font-medium">Rolle</span>
+                    <span className="text-xs text-muted-foreground">{getRoleDisplayName(user.role)}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="flex flex-col items-start">
+                    <span className="text-sm font-medium">Selskap</span>
+                    <span className="text-xs text-muted-foreground">{user.company}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="flex flex-col items-start" disabled={!selectedProject}>
+                    <span className="text-sm font-medium">Prosjekt</span>
+                    <span className="text-xs text-muted-foreground">
+                      {selectedProject ? projects.find((p) => p.id === selectedProject)?.name : "Ingen valgt"}
+                    </span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-red-600 dark:text-red-400 font-medium"
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      handleLogout();
+                    }}
+                  >
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -165,22 +238,22 @@ export default function HomePage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-slate-900 mb-2">
+          <h2 className="text-3xl font-bold text-foreground mb-2">
             Velkommen til BOB
           </h2>
-          <p className="text-lg text-slate-600 max-w-3xl">
-            Ditt digitale verktoy for byggeprosjekter som kobler BIM-modeller direkte til produksjon, logistikk og prosjektstyring. Generer mengdelister, lag arbeidstegninger, og administrer kvalitetskontroller pa ett sted.
+          <p className="text-lg text-muted-foreground max-w-3xl">
+            Ditt digitale verktøy for byggeprosjekter som kobler BIM-modeller direkte til produksjon, logistikk og prosjektstyring. Generer mengdelister, lag arbeidstegninger, og administrer kvalitetskontroller på ett sted.
           </p>
         </div>
 
         {!selectedProject && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-            <div className="flex items-center space-x-2">
-              <AlertTriangle className="w-5 h-5 text-yellow-600" />
-              <p className="text-yellow-800 font-medium">Ingen prosjekt valgt</p>
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-400/30 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-300" />
+              <p className="text-amber-800 dark:text-amber-100 font-medium">Ingen prosjekt valgt</p>
             </div>
-            <p className="text-yellow-700 text-sm mt-1">
-              Velg et prosjekt fra dropdown-menyen over for aa fa tilgang til BIM-modeller, produksjonsverktoy og kontroller.
+            <p className="text-amber-700 dark:text-amber-200 text-sm mt-1">
+              Velg et prosjekt fra dropdown-menyen over for å få tilgang til BIM-modeller, produksjonsverktøy og kontroller.
             </p>
           </div>
         )}
@@ -206,7 +279,7 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">24</div>
-              <p className="text-xs text-muted-foreground">Denne maneden</p>
+              <p className="text-xs text-muted-foreground">Denne måneden</p>
             </CardContent>
           </Card>
           <Card>
@@ -216,12 +289,12 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">12</div>
-              <p className="text-xs text-muted-foreground">8 bestatt, 4 venter</p>
+              <p className="text-xs text-muted-foreground">8 bestått, 4 venter</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Planlagte Moter</CardTitle>
+              <CardTitle className="text-sm font-medium">Planlagte møter</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -244,7 +317,7 @@ export default function HomePage() {
 
           <TabsContent value="projects" className="space-y-6">
             <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-slate-900">Dine Prosjekter</h3>
+              <h3 className="text-xl font-semibold text-foreground">Dine Prosjekter</h3>
               <ProjectCreationModal onProjectCreate={handleProjectCreate} />
             </div>
             
@@ -253,7 +326,7 @@ export default function HomePage() {
                 <Card 
                   key={project.id} 
                   className={`hover:shadow-lg transition-shadow cursor-pointer ${
-                    selectedProject === project.id ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                    selectedProject === project.id ? 'ring-2 ring-blue-500/70 dark:ring-blue-400/70 bg-blue-50 dark:bg-blue-950/40' : ''
                   }`}
                   onClick={() => setSelectedProject(project.id)}
                 >
@@ -271,10 +344,10 @@ export default function HomePage() {
                   <CardContent>
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">Fremdrift</span>
+                        <span className="text-muted-foreground">Fremdrift</span>
                         <span className="font-medium">{project.progress}%</span>
                       </div>
-                      <div className="w-full bg-slate-200 rounded-full h-2">
+                      <div className="w-full bg-muted rounded-full h-2">
                         <div 
                           className={`h-2 rounded-full ${
                             project.progress >= 80 ? 'bg-green-600' : 
@@ -283,7 +356,7 @@ export default function HomePage() {
                           style={{ width: `${project.progress}%` }}
                         ></div>
                       </div>
-                      <div className="flex justify-between text-sm text-slate-600">
+                      <div className="flex justify-between text-sm text-muted-foreground">
                         <span>Team: {project.teamMembers.length} medlemmer</span>
                         <span>{project.location}</span>
                       </div>
@@ -296,9 +369,9 @@ export default function HomePage() {
 
           <TabsContent value="models" className="space-y-6">
             <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-slate-900">BIM Modeller</h3>
+              <h3 className="text-xl font-semibold text-foreground">BIM Modeller</h3>
               {selectedProject && (
-                <div className="text-sm text-slate-600">
+                <div className="text-sm text-muted-foreground">
                   Prosjekt: <span className="font-medium">{projects.find(p => p.id === selectedProject)?.name}</span>
                 </div>
               )}
@@ -308,9 +381,9 @@ export default function HomePage() {
 
           <TabsContent value="production" className="space-y-6">
             <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-slate-900">Produksjon</h3>
+              <h3 className="text-xl font-semibold text-foreground">Produksjon</h3>
               {selectedProject && (
-                <div className="text-sm text-slate-600">
+                <div className="text-sm text-muted-foreground">
                   Prosjekt: <span className="font-medium">{projects.find(p => p.id === selectedProject)?.name}</span>
                 </div>
               )}
@@ -320,9 +393,9 @@ export default function HomePage() {
 
           <TabsContent value="controls" className="space-y-6">
             <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-slate-900">Kvalitetskontroller</h3>
+              <h3 className="text-xl font-semibold text-foreground">Kvalitetskontroller</h3>
               {selectedProject && (
-                <div className="text-sm text-slate-600">
+                <div className="text-sm text-muted-foreground">
                   Prosjekt: <span className="font-medium">{projects.find(p => p.id === selectedProject)?.name}</span>
                 </div>
               )}
@@ -345,4 +418,3 @@ export default function HomePage() {
     </div>
   );
 }
-
