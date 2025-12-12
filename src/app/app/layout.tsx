@@ -14,11 +14,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      <aside className="w-64 border-r border-slate-200 bg-white flex flex-col">
-        <div className="px-5 py-4 border-b border-slate-200">
-          <div className="text-lg font-semibold text-slate-900">BOB</div>
-          <p className="text-xs text-slate-500 mt-1">BIM &amp; Operations</p>
+    <div className="min-h-screen bg-background text-foreground flex">
+      <aside className="w-64 border-r border-border/70 bg-card flex flex-col">
+        <div className="px-5 py-4 border-b border-border/70">
+          <div className="text-lg font-semibold">BOB</div>
+          <p className="text-xs text-muted-foreground mt-1">BIM &amp; Operations</p>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1">
           {navItems.map((item) => {
@@ -31,8 +31,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 className={clsx(
                   "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
                   active
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "text-slate-700 hover:bg-slate-100"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted"
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -42,9 +42,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="px-4 pb-4">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="text-xs text-slate-500">Prosjekt</p>
-            <p className="text-sm font-medium text-slate-900">Velg i headeren</p>
+          <div className="rounded-lg border border-border/70 bg-muted px-3 py-2">
+            <p className="text-xs text-muted-foreground">Prosjekt</p>
+            <p className="text-sm font-medium">Velg i headeren</p>
           </div>
         </div>
       </aside>

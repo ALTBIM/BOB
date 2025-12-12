@@ -128,7 +128,7 @@ export default function HomePage() {
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Søk prosjekter, brukere, filer..."
-                  className="pl-10 bg-muted/40 border-border/70"
+                  className="pl-10 bg-muted border-border/70"
                 />
               </div>
             </div>
@@ -184,7 +184,7 @@ export default function HomePage() {
                         {getRoleDisplayName(user.role)} · {user.company}
                       </span>
                     </div>
-                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-blue-600 to-indigo-500 text-white flex items-center justify-center text-sm font-semibold">
+                    <div className="h-9 w-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
                       {userInitials || user.name.charAt(0).toUpperCase()}
                     </div>
                     <ChevronDown className="w-4 h-4 text-muted-foreground" />
@@ -193,7 +193,7 @@ export default function HomePage() {
                 <DropdownMenuContent align="end" className="w-64">
                   <DropdownMenuLabel>
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-500 text-white flex items-center justify-center text-sm font-semibold">
+                      <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
                         {userInitials || user.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
@@ -306,7 +306,7 @@ export default function HomePage() {
 
         {/* Main Dashboard */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-6 bg-muted/70 border border-border/60 rounded-lg p-1">
             <TabsTrigger value="projects">Dashboard</TabsTrigger>
             <TabsTrigger value="models" disabled={!selectedProject}>BIM Modeller</TabsTrigger>
             <TabsTrigger value="production" disabled={!selectedProject}>Produksjon</TabsTrigger>
@@ -326,7 +326,7 @@ export default function HomePage() {
                 <Card 
                   key={project.id} 
                   className={`hover:shadow-lg transition-shadow cursor-pointer ${
-                    selectedProject === project.id ? 'ring-2 ring-blue-500/70 dark:ring-blue-400/70 bg-blue-50 dark:bg-blue-950/40' : ''
+                    selectedProject === project.id ? 'ring-2 ring-primary/60 bg-primary/5 dark:bg-primary/10' : ''
                   }`}
                   onClick={() => setSelectedProject(project.id)}
                 >

@@ -280,19 +280,19 @@ export default function ChatPage() {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr_280px] gap-4 min-h-[80vh]">
       {/* Sidebar */}
-      <aside className="border border-slate-200 rounded-xl bg-white p-3 flex flex-col">
+      <aside className="border border-border rounded-xl bg-card p-3 flex flex-col">
         <div className="flex items-center gap-2 px-2 py-1">
-          <MessageCircle className="h-5 w-5 text-slate-600" />
+          <MessageCircle className="h-5 w-5 text-muted-foreground" />
           <div>
-            <p className="text-sm font-semibold text-slate-900">Samtaler</p>
-            <p className="text-xs text-slate-500">Per prosjekt</p>
+            <p className="text-sm font-semibold">Samtaler</p>
+            <p className="text-xs text-muted-foreground">Per prosjekt</p>
           </div>
         </div>
 
         <div className="mt-3">
           <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-            <Input placeholder="Soek i samtaler..." className="pl-9 text-sm" />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Søk i samtaler..." className="pl-9 text-sm bg-background" />
           </div>
         </div>
 
@@ -303,19 +303,21 @@ export default function ChatPage() {
               <div key={c.id} className="flex gap-1 items-center">
                 <button
                   onClick={() => setActiveConversationId(c.id)}
-                  className={`flex-1 text-left px-3 py-2 rounded-lg border ${
-                    active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 hover:border-slate-300"
+                  className={`flex-1 text-left px-3 py-2 rounded-lg border transition-colors ${
+                    active
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border hover:border-muted-foreground/50 bg-background"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium truncate">{c.title}</span>
                     <span className="text-xs opacity-70">{c.updatedAt}</span>
                   </div>
-                  <p className={`text-xs mt-1 ${active ? "text-slate-200" : "text-slate-500"} `}>Historikk og kilder</p>
+                  <p className={`text-xs mt-1 ${active ? "text-primary-foreground/80" : "text-muted-foreground"} `}>Historikk og kilder</p>
                 </button>
                 {conversations.length > 1 && (
                   <button
-                    className="p-1 text-slate-400 hover:text-red-500"
+                    className="p-1 text-muted-foreground hover:text-destructive"
                     onClick={() => handleDeleteConversation(c.id)}
                     aria-label="Slett samtale"
                   >
@@ -333,15 +335,15 @@ export default function ChatPage() {
       </aside>
 
       {/* Chat */}
-      <section className="border border-slate-200 rounded-xl bg-white flex flex-col">
-        <header className="border-b border-slate-200 p-4 flex flex-wrap gap-3 items-center justify-between">
+      <section className="border border-border rounded-xl bg-card flex flex-col">
+        <header className="border-b border-border p-4 flex flex-wrap gap-3 items-center justify-between">
           <div>
-            <p className="text-sm text-slate-500">Prosjekt</p>
+            <p className="text-sm text-muted-foreground">Prosjekt</p>
             <div className="flex items-center gap-2">
               <Input
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value || "demo-project")}
-                className="w-48"
+                className="w-48 bg-background"
               />
               <Badge variant="secondary">Chatmodus</Badge>
             </div>
@@ -371,17 +373,17 @@ export default function ChatPage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-4 space-y-3 bg-slate-50">
+        <div className="flex-1 overflow-auto p-4 space-y-3 bg-muted">
           {messages.map((m) => (
             <div
               key={m.id}
-              className={`max-w-3xl rounded-lg px-4 py-3 ${
-                m.author === "user" ? "bg-white border border-slate-200 ml-auto shadow-sm" : "bg-slate-900 text-white"
+              className={`max-w-3xl rounded-lg px-4 py-3 border ${
+                m.author === "user" ? "bg-card border-border ml-auto shadow-sm" : "bg-muted/70 border-border text-foreground"
               }`}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs uppercase tracking-wide opacity-70">{m.author === "user" ? "Du" : "BOB"}</span>
-                <span className="text-xs opacity-60">{m.timestamp}</span>
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">{m.author === "user" ? "Du" : "BOB"}</span>
+                <span className="text-xs text-muted-foreground">{m.timestamp}</span>
               </div>
               <p className="text-sm leading-relaxed whitespace-pre-line">{m.content}</p>
             </div>
@@ -389,38 +391,38 @@ export default function ChatPage() {
           <div ref={bottomRef} />
         </div>
 
-        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
+        <div className="border-t border-border bg-muted px-4 py-3">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-slate-700">Kilder fra prosjektet</p>
+            <p className="text-xs font-semibold text-foreground">Kilder fra prosjektet</p>
             <Badge variant="outline" className="text-[10px]">
               {activeSources.length} funnet
             </Badge>
           </div>
           {activeSources.length === 0 ? (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Ingen kilder mottatt ennå. Legg til dokumenter/IFC eller kontroller prosjekt-ID.
             </p>
           ) : (
             <div className="space-y-2">
               {activeSources.map((s, idx) => (
-                <div key={s.id} className="rounded border border-slate-200 bg-white p-2">
+                <div key={s.id} className="rounded border border-border bg-card p-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary" className="text-[10px]">Kilde {idx + 1}</Badge>
-                      <span className="text-xs font-semibold text-slate-800">{s.title}</span>
+                      <span className="text-xs font-semibold text-foreground">{s.title}</span>
                     </div>
-                    <span className="text-[10px] text-slate-500">{s.discipline}</span>
+                    <span className="text-[10px] text-muted-foreground">{s.discipline}</span>
                   </div>
-                  <div className="text-[10px] text-slate-600 mt-1">{s.reference}</div>
-                  <div className="text-xs text-slate-700 mt-1">{s.snippet}</div>
-                  {s.zone && <div className="text-[10px] text-slate-500 mt-1">Sone: {s.zone}</div>}
+                  <div className="text-[10px] text-muted-foreground mt-1">{s.reference}</div>
+                  <div className="text-xs text-foreground mt-1">{s.snippet}</div>
+                  {s.zone && <div className="text-[10px] text-muted-foreground mt-1">Sone: {s.zone}</div>}
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <footer className="border-t border-slate-200 p-4">
+        <footer className="border-t border-border p-4">
           <div className="flex items-center gap-2">
             <Input
               placeholder="Skriv til BOB..."
@@ -439,23 +441,23 @@ export default function ChatPage() {
               {isSending ? "Sender..." : "Send"}
             </Button>
           </div>
-          <p className="text-xs text-slate-500 mt-2">
-            BOB foreslaar neste steg og bruker prosjektets kontekst. Kilder vises naar dokumenter er koblet paa.
+          <p className="text-xs text-muted-foreground mt-2">
+            BOB foreslår neste steg og bruker prosjektets kontekst. Kilder vises når dokumenter er koblet på.
           </p>
         </footer>
       </section>
 
       {/* Memory panel */}
-      <aside className="border border-slate-200 rounded-xl bg-white p-3 flex flex-col">
-        <p className="text-sm font-semibold text-slate-900 mb-2">BOB husker (prosjekt)</p>
+      <aside className="border border-border rounded-xl bg-card p-3 flex flex-col">
+        <p className="text-sm font-semibold text-foreground mb-2">BOB husker (prosjekt)</p>
         <div className="space-y-2 overflow-auto flex-1">
           {memoryItems.length === 0 && (
-            <p className="text-xs text-slate-500">Ingen kontekst enda. Legg til viktige fakta, krav eller antakelser.</p>
+            <p className="text-xs text-muted-foreground">Ingen kontekst enda. Legg til viktige fakta, krav eller antakelser.</p>
           )}
           {memoryItems.map((m) => (
-            <div key={m.id} className="border border-slate-200 rounded-lg p-2 text-sm flex justify-between gap-2">
-              <span className="text-slate-800 whitespace-pre-line">{m.text}</span>
-              <button className="text-slate-400 hover:text-red-500" onClick={() => handleDeleteMemory(m.id)} aria-label="Slett kontekst">
+            <div key={m.id} className="border border-border rounded-lg p-2 text-sm flex justify-between gap-2">
+              <span className="text-foreground whitespace-pre-line">{m.text}</span>
+              <button className="text-muted-foreground hover:text-red-500" onClick={() => handleDeleteMemory(m.id)} aria-label="Slett kontekst">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
@@ -475,3 +477,7 @@ export default function ChatPage() {
     </div>
   );
 }
+
+
+
+
