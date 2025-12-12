@@ -152,7 +152,16 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, projectId, style: styleMode, sources: withSources, memory: memoryItems }),
       });
-      if (!response.ok || !response.body) throw new Error("Chat API feilet");
+
+      const contentType = response.headers.get("content-type") || "";
+      if (!response.ok || !response.body || !contentType.includes("text/event-stream")) {
+        const errorText = await response.text();
+        throw new Error(
+          `Chat API feilet (${response.status}). ${
+            errorText?.length ? `Server sa: ${errorText}` : "Ingen respons fra server."
+          }`
+        );
+      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -179,12 +188,16 @@ export default function ChatPage() {
           }
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       setMessagesByConversation((prev) => ({
         ...prev,
         [activeConversationId]: (prev[activeConversationId] || []).map((m) =>
           m.id === botMsgId
-            ? { ...m, content: "Kunne ikke hente svar naa. Proev igjen om litt.", timestamp: nowTime() }
+            ? {
+                ...m,
+                content: `Kunne ikke hente svar naa. ${err?.message || "Ukjent feil."}`,
+                timestamp: nowTime(),
+              }
             : m
         ),
       }));

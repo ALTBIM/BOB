@@ -78,7 +78,7 @@ Gi konklusjon forst, deretter grunnlag/antakelser og anbefalinger.`;
     const text = await response.text();
     return NextResponse.json(
       { error: "OpenAI svarte ikke OK", status: response.status, body: text },
-      { status: 500 }
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 
