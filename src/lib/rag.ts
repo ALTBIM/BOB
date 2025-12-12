@@ -1,3 +1,6 @@
+import { promises as fs } from "fs";
+import path from "path";
+
 export type SourceDocument = {
   id: string;
   projectId: string;
@@ -24,63 +27,55 @@ type RetrieveOptions = {
   includeGeneralFallback?: boolean;
 };
 
-const projectDocuments: SourceDocument[] = [
-  {
-    id: "tek17-isolasjon",
-    projectId: "project-1",
-    title: "TEK17 Kapittel 13 - Varmeisolasjon",
-    discipline: "Regulation",
-    reference: "TEK17 §13-4",
-    zone: "Fasade",
-    text: "Yttervegger og tak skal prosjekteres slik at samlet varmetap tilfredsstiller rammekravene. Klimasone 3 krever normalt U-verdi yttervegg ≤ 0,18 W/m2K og vinduer ≤ 0,8 W/m2K. Prosjekterende skal dokumentere beregning, kontroll og eventuell avviksbehandling.",
-  },
-  {
-    id: "svane-materialer",
-    projectId: "project-1",
-    title: "Svanemerket materialkrav",
-    discipline: "Sustainability",
-    reference: "Svanemerket 3.4",
-    zone: "Materialvalg",
-    text: "For prosjekter med Svanemerket skal trevirke være FSC eller PEFC, og det er krav om lavemitterende maling/lim. Dokumenter produktdatablad og leverandørsertifikater per leveranse.",
-  },
-  {
-    id: "logistikk-plan",
-    projectId: "project-2",
-    title: "Leveranseplan kontorbygg",
-    discipline: "Logistics",
-    reference: "Logistikkplan v1.2",
-    zone: "Lastesone B",
-    text: "Leveranser til Lastesone B må forskyves utenom 07-09 og 15-17. Prefab dekker leveres etappevis per sone, og krever klarert kranløftplan før lossing. Alle biler skal ha forhåndsbooket slot i 3PL-portalen.",
-  },
-  {
-    id: "ifc-struktur",
-    projectId: "project-3",
-    title: "BIM IFC – Bæresystem",
-    discipline: "Structure",
-    reference: "Model note v2",
-    zone: "Kjerne",
-    text: "IFC-modellen for bæresystem beskriver betongkjerner, stålbjelker og hulldekker. Kollisjoner registreres primært mellom stål og VVS i sjakter. Mengdegrunnlag for kjerne: 540 m3 betong, 42 tonn stål.",
-  },
-];
+const dataDir = path.join(process.cwd(), "data");
+const docsFile = path.join(dataDir, "rag-docs.json");
 
-const generalDocuments: SourceDocument[] = [
-  {
-    id: "best-practice-mottak",
-    projectId: "general",
-    title: "Mottakskontroll prefab",
-    discipline: "Quality",
-    reference: "Best practice",
-    text: "Ved mottak skal elementer kontrolleres mot følgeseddel, synlige skader, fukt og merking. Avvik loggføres og sperres før bruk. Bruk sjekkliste tilpasset prosjekt og leverandør.",
-  },
-  {
-    id: "ifc-rutine",
-    projectId: "general",
-    title: "IFC prosesseringsrutine",
-    discipline: "BIM",
-    reference: "Rutine 01",
-    text: "IFC-filer lagres per prosjekt og versjon. Metadata: prosjekt, modelltype, disiplin, sone/etasje, filstørrelse. Etter prosessering lagres materialuttrekk og objektantall i datastrukturen per modell.",
-  },
-];
+let cachedDocs: SourceDocument[] | null = null;
+
+async function ensureDocsFile() {
+  try {
+    await fs.mkdir(dataDir, { recursive: true });
+    await fs.access(docsFile);
+  } catch {
+    await fs.writeFile(docsFile, "[]", "utf-8");
+  }
+}
+
+async function loadDocs(): Promise<SourceDocument[]> {
+  if (cachedDocs) return cachedDocs;
+  await ensureDocsFile();
+  try {
+    const raw = await fs.readFile(docsFile, "utf-8");
+    const parsed = JSON.parse(raw) as SourceDocument[];
+    cachedDocs = parsed;
+    return parsed;
+  } catch (err) {
+    console.error("Kunne ikke lese RAG-dokumenter", err);
+    return [];
+  }
+}
+
+async function persistDocs(docs: SourceDocument[]) {
+  cachedDocs = docs;
+  await ensureDocsFile();
+  await fs.writeFile(docsFile, JSON.stringify(docs, null, 2), "utf-8");
+}
+
+export async function upsertDocument(doc: SourceDocument) {
+  const docs = await loadDocs();
+  const existingIndex = docs.findIndex((d) => d.id === doc.id);
+  if (existingIndex >= 0) {
+    docs[existingIndex] = doc;
+  } else {
+    docs.push(doc);
+  }
+  await persistDocs(docs);
+}
+
+export async function listDocuments(projectId?: string) {
+  const docs = await loadDocs();
+  return projectId ? docs.filter((d) => d.projectId === projectId) : docs;
+}
 
 function scoreText(text: string, query: string): number {
   const haystack = text.toLowerCase();
@@ -105,17 +100,20 @@ function trimSnippet(text: string, maxLength = 220): string {
   return `${text.slice(0, maxLength - 3)}...`;
 }
 
-export function retrieveContext(
+export async function retrieveContext(
   projectId: string,
   query: string,
   options: RetrieveOptions = {}
-): { sources: RetrievedSource[]; contextText: string } {
+): Promise<{ sources: RetrievedSource[]; contextText: string }> {
   const limit = options.limit ?? 4;
-  const projectPool = projectDocuments.filter((doc) => doc.projectId === projectId);
+  const docs = await loadDocs();
+  const projectPool = docs.filter((doc) => doc.projectId === projectId);
+  const generalPool = docs.filter((doc) => doc.projectId === "general");
+
   const pool = projectPool.length
     ? projectPool
     : options.includeGeneralFallback
-    ? generalDocuments
+    ? generalPool
     : [];
 
   const scored = pool

@@ -99,7 +99,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Melding mangler." }, { status: 400 });
   }
 
-  const { sources: retrievedSources, contextText } = retrieveContext(projectId, message, {
+  const { sources: retrievedSources, contextText } = await retrieveContext(projectId, message, {
     includeGeneralFallback: true,
   });
 
