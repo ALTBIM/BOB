@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FileText, Download, Calculator, Building2, Image, CheckCircle, Trash2 } from "lucide-react";
 import { db, BIMModel } from "@/lib/database";
 import { getAvailableMaterialsForModel, recordModelMaterials } from "@/lib/material-store";
+import { parseIfcFile } from "@/lib/ifc-parser";
 
 interface ProductionDashboardProps {
   selectedProject: string | null;
@@ -104,39 +105,6 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     }
   };
 
-  const extractIfcData = async (file?: File) => {
-    if (!file) {
-      return { materials: [] as string[], objectCount: 0, zoneCount: 0 };
-    }
-    try {
-      const text = await file.text();
-      const materialMatches: string[] = [];
-      const regexes = [
-        /IFCMATERIAL\(['"]?([^'")]+)['"]?\)/gi,
-        /IFCMATERIALLAYER\(['"]?([^'")]+)['"]?\)/gi,
-        /IFCMATERIALLIST\(([^)]+)\)/gi,
-      ];
-      regexes.forEach((re) => {
-        let m: RegExpExecArray | null;
-        // eslint-disable-next-line no-cond-assign
-        while ((m = re.exec(text))) {
-          const raw = m[1] ?? "";
-          raw
-            .split(/['",]/)
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .forEach((token) => materialMatches.push(token.toLowerCase()));
-        }
-      });
-      const uniqueMaterials = Array.from(new Set(materialMatches)).filter(Boolean);
-      const objectCount = (text.match(/^#/gm) || []).length;
-      return { materials: uniqueMaterials, objectCount, zoneCount: 0 };
-    } catch (err) {
-      console.error("IFC parsing failed", err);
-      return { materials: [] as string[], objectCount: 0, zoneCount: 0 };
-    }
-  };
-
   const processFiles = (fileList: File[]) => {
     if (!selectedProject) {
       alert("Velg et prosjekt fra dropdown-menyen først");
@@ -184,7 +152,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
             if (progress >= 100) {
               clearInterval(interval);
               setTimeout(async () => {
-                const parsed = await extractIfcData(f.rawFile);
+                const parsed = await parseIfcFile(f.rawFile!);
                 setFiles((prevFiles) =>
                   prevFiles.map((pf) => {
                     if (pf.id !== targetId) return pf;
@@ -194,7 +162,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                       status: "completed",
                       progress: 100,
                       objects: parsed.objectCount || pf.objects || Math.floor(Math.random() * 5000) + 1000,
-                      zones: parsed.zoneCount || pf.zones || Math.floor(Math.random() * 20) + 5,
+                      zones: parsed.spaceCount || pf.zones || Math.floor(Math.random() * 20) + 5,
                       materials: materials.length,
                     };
                     persistModelToStore(completedFile, materials);
@@ -470,7 +438,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">Velg materialer</CardTitle>
-                      <CardDescription>Materialer fra IFC-filen (enkelt uttrekk fra tekstinnhold)</CardDescription>
+                      <CardDescription>Materialer fra IFC-filen (web-ifc, fallback til tekst ved feil)</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {availableMaterials.length === 0 && (
