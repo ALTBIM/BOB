@@ -63,6 +63,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   const [generatedList, setGeneratedList] = useState<QuantityList | null>(null);
   const [files, setFiles] = useState<ModelFile[]>([]);
   const [existingFiles, setExistingFiles] = useState<ModelFile[]>([]);
+  const [isDrawingExporting, setIsDrawingExporting] = useState(false);
   const fallbackMaterials = ["betong", "stal", "tre", "glass", "gips", "isolasjon"];
 
   useEffect(() => {
@@ -364,6 +365,65 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     }
   };
 
+  const generateDrawingSvg = () => {
+    if (!selectedModel) {
+      alert("Velg modell først");
+      return;
+    }
+    const model = availableModels.find((m) => m.id === selectedModel);
+    if (!model) {
+      alert("Fant ikke valgt modell");
+      return;
+    }
+    setIsDrawingExporting(true);
+    try {
+      const width = 800;
+      const height = 600;
+      const blocks = Math.max(1, Math.min(12, model.objects ? Math.floor(model.objects / 1000) : 4));
+      const cols = Math.ceil(Math.sqrt(blocks));
+      const rows = Math.ceil(blocks / cols);
+      const blockW = Math.floor((width - 60) / cols);
+      const blockH = Math.floor((height - 140) / rows);
+
+      let rects = "";
+      for (let i = 0; i < blocks; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const x = 30 + col * blockW;
+        const y = 80 + row * blockH;
+        rects += `<rect x="${x}" y="${y}" width="${blockW - 10}" height="${blockH - 10}" fill="#e2e8f0" stroke="#0f172a" stroke-width="1.5" rx="6"/>`;
+        rects += `<text x="${x + 12}" y="${y + 20}" font-family="Arial" font-size="12" fill="#0f172a">Sone ${row + 1}-${col + 1}</text>`;
+      }
+
+      const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <style>
+    .title { font-family: Arial; font-size: 18px; font-weight: bold; fill: #0f172a; }
+    .subtitle { font-family: Arial; font-size: 12px; fill: #334155; }
+  </style>
+  <rect width="100%" height="100%" fill="#fff"/>
+  <text x="30" y="32" class="title">Arbeidstegning – ${model.name || model.filename}</text>
+  <text x="30" y="52" class="subtitle">Objekter: ${model.objects ?? "ukjent"} • Rom/soner: ${model.zones ?? "ukjent"} • Materialer: ${model.materials ?? "ukjent"}</text>
+  ${rects}
+</svg>`;
+
+      const blob = new Blob([svg], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(model.name || "model")}-arbeidstegning.svg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Kunne ikke generere tegning", err);
+      alert("Kunne ikke generere tegning (SVG).");
+    } finally {
+      setIsDrawingExporting(false);
+    }
+  };
+
   if (!selectedProject) {
     return (
       <Card>
@@ -579,16 +639,56 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
           <Card>
             <CardHeader>
               <CardTitle>Tegningsproduksjon</CardTitle>
-              <CardDescription>Generer arbeidstegninger med posisjonsnumre</CardDescription>
+              <CardDescription>
+                Enkel SVG-generering basert på IFC-metadata (ikke full geometri). Brukes som midlertidig arbeidstegning.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="text-center py-12">
-              <Image className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-              <h3 className="font-medium text-slate-900 mb-2">Tegningsproduksjon</h3>
-              <p className="text-slate-600 mb-4">Kommer i neste versjon - generer arbeidstegninger med posisjonsnumre</p>
-              <Button variant="outline" disabled>
-                <Image className="w-4 h-4 mr-2" />
-                Generer Tegninger
-              </Button>
+            <CardContent className="space-y-4">
+              {availableModels.length === 0 ? (
+                <div className="text-center py-8">
+                  <Image className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                  <p className="text-slate-600">Ingen modeller tilgjengelig. Last opp en IFC først.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label>Velg modell</Label>
+                    <Select value={selectedModel} onValueChange={setSelectedModel}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Velg en IFC-fil..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableModels.map((model) => (
+                          <SelectItem key={model.id} value={model.id}>
+                            <div className="flex items-center space-x-2">
+                              <FileText className="w-4 h-4" />
+                              <span>{model.name || model.filename}</span>
+                              <span className="text-xs text-slate-500">({model.objects} objekter)</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="text-sm text-slate-600">
+                    Genererer en enkel SVG med sone- og objektoppsummering (placeholder). Full geometri krever videre
+                    integrasjon (web-ifc-three/IFC.js).
+                  </div>
+                  <Button onClick={generateDrawingSvg} disabled={isDrawingExporting || !selectedModel}>
+                    {isDrawingExporting ? (
+                      <>
+                        <Image className="w-4 h-4 mr-2 animate-spin" />
+                        Genererer SVG...
+                      </>
+                    ) : (
+                      <>
+                        <Image className="w-4 h-4 mr-2" />
+                        Last ned enkel tegning (SVG)
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
