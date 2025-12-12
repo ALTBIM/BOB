@@ -16,33 +16,26 @@ import QualityControlDashboard from "@/components/controls/QualityControlDashboa
 import UserManagement from "@/components/auth/UserManagement";
 import ProjectManagement from "@/components/admin/ProjectManagement";
 import { User, Project, db, getRoleDisplayName } from "@/lib/database";
+import { useSession } from "@/lib/session";
 
 export default function HomePage() {
-  const [user, setUser] = useState<User | null>(null);
+  const { user, ready, login, logout } = useSession();
   const [isLoading, setIsLoading] = useState(true);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeTab, setActiveTab] = useState("projects");
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check for saved user on page load
-    const savedUser = localStorage.getItem('bob_user');
-    if (savedUser) {
-      try {
-        const parsedUser = JSON.parse(savedUser);
-        setUser(parsedUser);
-        console.log('Loaded saved user:', parsedUser);
-      } catch (error) {
-        console.error('Failed to parse saved user:', error);
-        localStorage.removeItem('bob_user');
-      }
+    if (ready) {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }, []);
+  }, [ready]);
 
   useEffect(() => {
     if (user) {
       loadUserProjects();
+    } else {
+      setProjects([]);
     }
   }, [user]);
 
@@ -58,16 +51,11 @@ export default function HomePage() {
 
   const handleLogin = (userData: User) => {
     console.log("User logged in:", userData);
-    setUser(userData);
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("bob_user", JSON.stringify(userData));
-    }
+    login(userData);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('bob_user');
-    setUser(null);
+    logout();
     setSelectedProject(null);
     console.log('User logged out');
   };

@@ -1,11 +1,12 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MessageCircle, Search, Send, Plus, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { v4 as uuid } from "uuid";
+import { useSession } from "@/lib/session";
 
 // Types
 interface Conversation {
@@ -25,6 +26,17 @@ interface MemoryItem {
   id: string;
   text: string;
   createdAt: string;
+}
+
+interface RetrievedSource {
+  id: string;
+  projectId: string;
+  title: string;
+  reference: string;
+  discipline: string;
+  zone?: string;
+  snippet: string;
+  score: number;
 }
 
 // Helpers
@@ -86,6 +98,8 @@ export default function ChatPage() {
   const [withSources, setWithSources] = useState(true);
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
   const [newMemoryText, setNewMemoryText] = useState("");
+  const [sourcesByConversation, setSourcesByConversation] = useState<Record<string, RetrievedSource[]>>({});
+  const { user } = useSession();
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -114,6 +128,7 @@ export default function ChatPage() {
   }, [memoryItems, projectId]);
 
   const messages = messagesByConversation[activeConversationId] || [];
+  const activeSources = sourcesByConversation[activeConversationId] || [];
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -150,7 +165,15 @@ export default function ChatPage() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, projectId, style: styleMode, sources: withSources, memory: memoryItems }),
+        body: JSON.stringify({
+          message: text,
+          projectId,
+          style: styleMode,
+          sources: withSources,
+          memory: memoryItems,
+          role: user?.role ?? "ukjent",
+          userId: user?.id ?? "anonymous",
+        }),
       });
 
       const contentType = response.headers.get("content-type") || "";
@@ -178,6 +201,19 @@ export default function ChatPage() {
         for (const part of parts) {
           if (part.startsWith("data: ")) {
             const chunk = part.replace("data: ", "").trim();
+            if (chunk.startsWith("SOURCES::")) {
+              const json = chunk.replace("SOURCES::", "");
+              try {
+                const parsed = JSON.parse(json) as RetrievedSource[];
+                setSourcesByConversation((prev) => ({
+                  ...prev,
+                  [activeConversationId]: parsed,
+                }));
+              } catch {
+                // ignore malformed metadata
+              }
+              continue;
+            }
             aggregated = aggregated ? `${aggregated}\n${chunk}` : chunk;
             setMessagesByConversation((prev) => ({
               ...prev,
@@ -351,6 +387,37 @@ export default function ChatPage() {
             </div>
           ))}
           <div ref={bottomRef} />
+        </div>
+
+        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-slate-700">Kilder fra prosjektet</p>
+            <Badge variant="outline" className="text-[10px]">
+              {activeSources.length} funnet
+            </Badge>
+          </div>
+          {activeSources.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              Ingen kilder mottatt ennå. Legg til dokumenter/IFC eller kontroller prosjekt-ID.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {activeSources.map((s, idx) => (
+                <div key={s.id} className="rounded border border-slate-200 bg-white p-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-[10px]">Kilde {idx + 1}</Badge>
+                      <span className="text-xs font-semibold text-slate-800">{s.title}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500">{s.discipline}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-600 mt-1">{s.reference}</div>
+                  <div className="text-xs text-slate-700 mt-1">{s.snippet}</div>
+                  {s.zone && <div className="text-[10px] text-slate-500 mt-1">Sone: {s.zone}</div>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <footer className="border-t border-slate-200 p-4">
