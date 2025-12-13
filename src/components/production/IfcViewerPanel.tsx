@@ -29,7 +29,7 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
 
   const loadViewer = async () => {
     if ((!file && !fileUrl) || !containerRef.current) {
-      setError("Ingen IFC-fil tilgjengelig i minnet. Last opp en fil i denne økten.");
+      setError("Ingen IFC-fil-URL tilgjengelig. Last opp på nytt i denne økten så vi har en gyldig lenke.");
       return;
     }
 
@@ -88,6 +88,7 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
         arrayBuffer = await file.arrayBuffer();
       } else {
         const res = await fetch(fileUrl!);
+        if (!res.ok) throw new Error(`Kunne ikke hente IFC fra URL (status ${res.status})`);
         arrayBuffer = await res.arrayBuffer();
       }
       const buffer = new Uint8Array(arrayBuffer);
@@ -128,7 +129,9 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
       };
     } catch (err: any) {
       console.error("IFC viewer error", err);
-      setError("Kunne ikke laste IFC-viewer. Sjekk at wasm er tilgjengelig (public/wasm) og at filen finnes.");
+      setError(
+        "Kunne ikke laste IFC-viewer. Sjekk at wasm er tilgjengelig (/wasm) og at fil-URLen er gyldig."
+      );
     } finally {
       setLoading(false);
     }
