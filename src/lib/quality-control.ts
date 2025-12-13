@@ -1,4 +1,4 @@
-// Quality Control Engine for BOB
+﻿// Quality Control Engine for BOB
 // Handles requirements checking, model validation, and logistics control
 
 export interface ControlFinding {
@@ -108,14 +108,14 @@ class QualityControlEngine {
 
     // Simulate control execution with progress updates
     const checks = [
-      { name: 'Fire safety requirements (TEK17 §11)', pass: true },
-      { name: 'Accessibility requirements (TEK17 §12)', pass: false },
-      { name: 'Energy performance (TEK17 §14)', pass: true },
-      { name: 'Ventilation requirements (TEK17 §13)', pass: true },
+      { name: 'Fire safety requirements (TEK17 kapittel 11)', pass: true },
+      { name: 'Accessibility requirements (TEK17 kapittel 12)', pass: false },
+      { name: 'Energy performance (TEK17 kapittel 14)', pass: true },
+      { name: 'Ventilation requirements (TEK17 kapittel 13)', pass: true },
       { name: 'Svanemerket material requirements', pass: false },
-      { name: 'Structural safety (TEK17 §10)', pass: true },
-      { name: 'Sound insulation (TEK17 §15)', pass: false },
-      { name: 'Moisture protection (TEK17 §9)', pass: true }
+      { name: 'Structural safety (TEK17 kapittel 10)', pass: true },
+      { name: 'Sound insulation (TEK17 kapittel 15)', pass: false },
+      { name: 'Moisture protection (TEK17 kapittel 9)', pass: true }
     ];
 
     let completedChecks = 0;
@@ -347,7 +347,7 @@ class QualityControlEngine {
 
   private generateRequirementsFinding(checkName: string, controlId: string): ControlFinding {
     const findingTemplates = {
-      'Accessibility requirements (TEK17 §12)': {
+      'Accessibility requirements (TEK17 kapittel 12)': {
         severity: 'high' as const,
         title: 'Accessibility Requirements Not Met',
         description: 'Door widths in Zone A1 do not meet minimum 850mm requirement for universal design',
@@ -366,10 +366,10 @@ class QualityControlEngine {
         assignedTo: ['Architect', 'Sustainability Consultant'],
         category: 'Environmental'
       },
-      'Sound insulation (TEK17 §15)': {
+      'Sound insulation (TEK17 kapittel 15)': {
         severity: 'high' as const,
         title: 'Insufficient Sound Insulation',
-        description: 'Wall construction between apartments does not meet DnT,w ≥ 55 dB requirement',
+        description: 'Wall construction between apartments does not meet DnT,w >= 55 dB requirement',
         location: 'Floor 2 - Apartment walls',
         zone: 'zone-b1',
         recommendation: 'Increase wall thickness or improve insulation specification',
@@ -569,7 +569,7 @@ ${meeting.description}
 
 PARTICIPANTS:
 ${meeting.suggestedParticipants.map(p => 
-  `• ${p.role} ${p.required ? '(Required)' : '(Optional)'} - ${p.reason}`
+  `-> ${p.role} ${p.required ? '(Required)' : '(Optional)'} - ${p.reason}`
 ).join('\n')}
 
 AGENDA ITEMS:
@@ -595,10 +595,10 @@ export const qualityControl = QualityControlEngine.getInstance();
 // Helper functions
 export const getSeverityColor = (severity: ControlFinding['severity']): string => {
   const colors = {
-    critical: '#DC2626', // red-600
-    high: '#EA580C',     // orange-600
-    medium: '#D97706',   // amber-600
-    low: '#65A30D'       // lime-600
+    critical: 'hsl(var(--destructive))',
+    high: 'hsl(var(--destructive))',
+    medium: 'hsl(var(--primary))',
+    low: 'hsl(var(--muted-foreground))'
   };
   return colors[severity];
 };
@@ -619,3 +619,5 @@ export const formatDuration = (seconds: number): string => {
   const remainingSeconds = seconds % 60;
   return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
 };
+
+

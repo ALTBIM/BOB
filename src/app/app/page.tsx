@@ -79,6 +79,25 @@ export default function HomePage() {
     setProjects((prev) => [...prev, newProject]);
   };
 
+  // Set a sensible default tab per rolle når prosjekt er valgt
+  useEffect(() => {
+    if (!user || !selectedProject) return;
+    const roleDefaults: Record<User["role"], string> = {
+      contractor: "production",
+      supplier: "production",
+      engineer: "models",
+      architect: "models",
+      client: "controls",
+      project_admin: "admin",
+      company_admin: "admin",
+      super_admin: "admin",
+    };
+    const defaultTab = roleDefaults[user.role];
+    if (defaultTab && activeTab === "projects") {
+      setActiveTab(defaultTab);
+    }
+  }, [user, selectedProject, activeTab]);
+
   if (!user) {
     return <LoginForm onLogin={handleLogin} />;
   }
@@ -167,9 +186,9 @@ export default function HomePage() {
                     variant="outline"
                     className="flex items-center gap-3 rounded-full border-border bg-card/90 px-3 h-11 shadow-sm"
                   >
-                    <div className="hidden sm:flex flex-col items-start leading-tight">
-                      <span className="text-sm font-semibold">{user.name}</span>
-                      <span className="text-xs text-muted-foreground">
+                    <div className="hidden sm:block text-left leading-tight max-w-[220px]">
+                      <span className="block text-sm font-semibold truncate">{user.name}</span>
+                      <span className="block text-xs text-muted-foreground truncate">
                         {getRoleDisplayName(user.role)} • {user.company}
                       </span>
                     </div>
