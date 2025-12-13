@@ -45,3 +45,26 @@ export const uploadIfcFile = async (file: File, projectId: string) => {
   const { data } = client.storage.from(BUCKET).getPublicUrl(path);
   return { path, publicUrl: data.publicUrl };
 };
+
+export const listIfcFiles = async (projectId: string) => {
+  if (!client) return [];
+  const path = projectId ? `${projectId}` : "";
+  const { data, error } = await client.storage.from(BUCKET).list(path, {
+    limit: 100,
+  });
+  if (error || !data) return [];
+  return data
+    .filter((item) => !item.name.endsWith("/"))
+    .map((item) => {
+      const fullPath = `${path}/${item.name}`;
+      const { data: publicData } = client.storage.from(BUCKET).getPublicUrl(fullPath);
+      return {
+        id: fullPath,
+        name: item.name,
+        size: item.metadata?.size ?? 0,
+        path: fullPath,
+        publicUrl: publicData.publicUrl,
+        uploadedAt: item.created_at,
+      };
+    });
+};

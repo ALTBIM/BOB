@@ -13,6 +13,7 @@ import { db, BIMModel } from "@/lib/database";
 import { getAvailableMaterialsForModel, recordModelMaterials } from "@/lib/material-store";
 import { parseIfcFile } from "@/lib/ifc-parser";
 import { IfcViewerPanel } from "./IfcViewerPanel";
+import { listIfcFiles } from "@/lib/storage";
 
 interface ProductionDashboardProps {
   selectedProject: string | null;
@@ -101,10 +102,53 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     try {
       const models = await db.getBIMModelsByProject(selectedProject);
       const completedModels = models.filter((m) => m.status === "completed");
-      setAvailableModels(completedModels);
 
-      if (completedModels.length > 0 && !selectedModel) {
-        setSelectedModel(completedModels[0].id);
+      // Hent eksisterende filer fra Supabase-bucket for persistens
+      const stored = await listIfcFiles(selectedProject);
+      const storedFiles: ModelFile[] = stored.map((item) => ({
+        id: item.path,
+        name: item.name,
+        size: item.size,
+        type: "application/octet-stream",
+        status: "completed",
+        progress: 100,
+        projectId: selectedProject,
+        uploadedAt: item.uploadedAt || new Date().toISOString(),
+        uploadedBy: "Supabase",
+        fileUrl: item.publicUrl,
+        storageUrl: item.publicUrl,
+      }));
+      setExistingFiles((prev) => {
+        const merged = [...prev];
+        storedFiles.forEach((sf) => {
+          if (!merged.find((f) => f.id === sf.id)) merged.push(sf);
+        });
+        return merged;
+      });
+
+      // Legg til minimal BIMModel for lagrede filer hvis de ikke finnes i mock-databasen
+      const storageModels: BIMModel[] = stored.map((item) => ({
+        id: item.path,
+        name: item.name,
+        filename: item.name,
+        size: item.size,
+        projectId: selectedProject,
+        uploadedBy: "Supabase",
+        uploadedAt: item.uploadedAt || new Date().toISOString(),
+        status: "completed",
+        version: 1,
+        storageUrl: item.publicUrl,
+      }));
+
+      const combined = [...completedModels];
+      storageModels.forEach((sm) => {
+        if (!combined.find((m) => m.id === sm.id)) combined.push(sm);
+      });
+
+      setAvailableModels(combined);
+
+      if (combined.length > 0 && !selectedModel) {
+        setSelectedModel(combined[0].id);
       }
     } catch (error) {
       console.error("Failed to load models:", error);
@@ -780,6 +824,4 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     </div>
   );
 }
-
-
 
