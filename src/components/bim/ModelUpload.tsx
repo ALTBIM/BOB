@@ -42,6 +42,9 @@ interface ModelFile {
   projectId: string;
   uploadedAt: string;
   uploadedBy: string;
+  fileId?: string;
+  modelId?: string;
+  provider?: string;
   fileUrl?: string;
   storageUrl?: string;
   rawFile?: File;
@@ -80,7 +83,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
 
         const stored = await listIfcFiles(selectedProject);
         const storedFiles: ModelFile[] = stored.map((item) => ({
-          id: item.path,
+          id: item.id || item.path,
           name: item.name,
           size: item.size,
           type: "application/octet-stream",
@@ -89,8 +92,10 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
           projectId: selectedProject,
           uploadedAt: item.uploadedAt || new Date().toISOString(),
           uploadedBy: "Lagring",
+          provider: item.provider,
           storageUrl: item.publicUrl,
-          fileUrl: item.publicUrl
+          fileUrl: item.publicUrl,
+          fileId: item.fileId,
         }));
 
         const merged = new Map<string, ModelFile>();
@@ -133,6 +138,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
         projectId: selectedProject,
         uploadedAt: new Date().toISOString(),
         uploadedBy: "Andreas Hansen",
+        provider: "local",
         storageUrl: objectUrl,
         fileUrl: objectUrl,
         rawFile: file
@@ -204,6 +210,20 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
       if (file.rawFile) {
         const uploaded = await uploadIfcFile(file.rawFile, file.projectId);
         storageUrl = uploaded?.publicUrl || storageUrl;
+        if (uploaded?.fileId || uploaded?.modelId || uploaded?.provider) {
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === file.id
+                ? {
+                    ...f,
+                    fileId: uploaded.fileId || f.fileId,
+                    modelId: uploaded.modelId || f.modelId,
+                    provider: uploaded.provider || f.provider,
+                  }
+                : f
+            )
+          );
+        }
       }
       if (!storageUrl) {
         throw new Error("Fikk ingen lagrings-URL fra opplasting");
@@ -211,16 +231,44 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
       if (storageUrl) {
         setFiles((prev) =>
           prev.map((f) =>
-            f.id === file.id ? { ...f, storageUrl, fileUrl: f.fileUrl || storageUrl } : f
+            f.id === file.id
+              ? {
+                  ...f,
+                  storageUrl,
+                  fileUrl: f.fileUrl || storageUrl,
+                  fileId: f.fileId || file.fileId,
+                  modelId: f.modelId || file.modelId,
+                  provider: f.provider || file.provider,
+                }
+              : f
           )
         );
         setExistingFiles((prev) => {
           const exists = prev.find((f) => f.id === file.id);
           if (!exists) {
-            return [...prev, { ...file, storageUrl, fileUrl: file.fileUrl || storageUrl }];
+            return [
+              ...prev,
+              {
+                ...file,
+                storageUrl,
+                fileUrl: file.fileUrl || storageUrl,
+                fileId: file.fileId,
+                modelId: file.modelId,
+                provider: file.provider,
+              },
+            ];
           }
           return prev.map((f) =>
-            f.id === file.id ? { ...f, storageUrl, fileUrl: f.fileUrl || storageUrl } : f
+            f.id === file.id
+              ? {
+                  ...f,
+                  storageUrl,
+                  fileUrl: f.fileUrl || storageUrl,
+                  fileId: f.fileId || file.fileId,
+                  modelId: f.modelId || file.modelId,
+                  provider: f.provider || file.provider,
+                }
+              : f
           );
         });
       }

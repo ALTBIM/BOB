@@ -20,6 +20,27 @@ export async function GET(request: Request) {
 
   const supabase = getSupabaseServerClient();
   if (supabase) {
+    // Persisted metadata if tables finnes
+    try {
+      const query = supabase.from("files").select("*").order("uploaded_at", { ascending: false }).limit(200);
+      const { data: dbFiles, error: dbErr } = projectId ? await query.eq("project_id", projectId) : await query;
+
+      if (!dbErr && dbFiles) {
+        dbFiles.forEach((f: any) => {
+          files.push({
+            path: f.path,
+            name: f.name,
+            size: f.size || 0,
+            uploadedAt: f.uploaded_at,
+            publicUrl: f.storage_url,
+            provider: f.source_provider || "supabase",
+          });
+        });
+      }
+    } catch (err) {
+      console.warn("DB files list feilet (ignorerer)", err);
+    }
+
     const supaPath = projectId ? `${projectId}` : "";
     const { data, error } = await supabase.storage.from(BUCKET).list(supaPath, { limit: 200 });
     if (!error && data) {

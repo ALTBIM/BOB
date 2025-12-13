@@ -19,7 +19,13 @@ export const uploadIfcFile = async (file: File, projectId: string) => {
       const res = await fetch("/api/ifc/upload", { method: "POST", body: form, cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        return { path: data.path as string, publicUrl: data.publicUrl as string, provider: data.provider as string };
+        return {
+          path: data.path as string,
+          publicUrl: data.publicUrl as string,
+          provider: data.provider as string,
+          fileId: data.fileId as string | undefined,
+          modelId: data.modelId as string | undefined,
+        };
       }
       const err = await res.json().catch(() => ({}));
       console.warn("API upload feilet", err);
@@ -44,7 +50,7 @@ export const uploadIfcFile = async (file: File, projectId: string) => {
     return null;
   }
   const { data } = client.storage.from(BUCKET).getPublicUrl(path);
-  return { path, publicUrl: data.publicUrl, provider: "supabase" };
+  return { path, publicUrl: data.publicUrl, provider: "supabase", fileId: undefined, modelId: undefined };
 };
 
 export const listIfcFiles = async (projectId: string) => {
@@ -55,13 +61,14 @@ export const listIfcFiles = async (projectId: string) => {
     if (res.ok) {
       const data = await res.json();
       return (data.files || []).map((item: any) => ({
-        id: item.path,
+        id: item.id || item.path,
         name: item.name,
         size: item.size || 0,
         path: item.path,
         publicUrl: item.publicUrl,
         uploadedAt: item.uploadedAt,
         provider: item.provider,
+        fileId: item.id,
       }));
     }
   } catch (err) {
@@ -88,6 +95,7 @@ export const listIfcFiles = async (projectId: string) => {
         publicUrl: publicData.publicUrl,
         uploadedAt: item.created_at,
         provider: "supabase",
+        fileId: undefined,
       };
     });
 };
