@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { db } from "@/lib/database";
 import { recordModelMaterials } from "@/lib/material-store";
-import { listIfcFiles, uploadIfcFile } from "@/lib/storage";
+import { listIfcFiles, uploadIfcFile, listAllFiles } from "@/lib/storage";
 
 interface ModelUploadProps {
   selectedProject: string | null;
@@ -63,17 +63,18 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
 
     const loadExisting = async () => {
       try {
-        const stored = await listIfcFiles(selectedProject);
-        const storedFiles: ModelFile[] = stored.map((item) => ({
+        // Hent alle filer (ikke bare IFC) for å bruke denne fanen som en enkel dokumentoversikt inntil dedikert side finnes
+        const allFiles = await listAllFiles(selectedProject);
+        const mapped: ModelFile[] = allFiles.map((item) => ({
           id: item.id || item.path,
           name: item.name,
-          size: item.size,
-          type: "application/octet-stream",
+          size: item.size || 0,
+          type: item.type || "application/octet-stream",
           status: "completed",
           progress: 100,
           projectId: selectedProject,
           uploadedAt: item.uploadedAt || new Date().toISOString(),
-          uploadedBy: "Lagring",
+          uploadedBy: item.uploadedBy || "Lagring",
           provider: item.provider,
           storageUrl: item.publicUrl,
           fileUrl: item.publicUrl,
@@ -81,7 +82,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
         }));
 
         const merged = new Map<string, ModelFile>();
-        storedFiles.forEach((f) => {
+        mapped.forEach((f) => {
           if (f.storageUrl) merged.set(f.id, f);
         });
         setExistingFiles(Array.from(merged.values()));
