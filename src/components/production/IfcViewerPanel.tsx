@@ -1,10 +1,12 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 
+// Host wasm locally; fall back to CDN if needed
+const WASM_LOCAL = "/wasm/";
 const WASM_CDN = "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/";
 
 type Props = {
@@ -27,7 +29,7 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
 
   const loadViewer = async () => {
     if ((!file && !fileUrl) || !containerRef.current) {
-      setError("Ingen IFC-fil tilgjengelig i minnet. Last opp en fil i denne \u00f8kten.");
+      setError("Ingen IFC-fil tilgjengelig i minnet. Last opp en fil i denne økten.");
       return;
     }
 
@@ -74,7 +76,12 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
       controls.update();
 
       const loader = new IFCLoader();
-      loader.ifcManager.setWasmPath(WASM_CDN);
+      try {
+        loader.ifcManager.setWasmPath(WASM_LOCAL);
+      } catch (err) {
+        console.warn("WASM local path failed, falling back to CDN", err);
+        loader.ifcManager.setWasmPath(WASM_CDN);
+      }
 
       let arrayBuffer: ArrayBuffer;
       if (file) {
@@ -85,10 +92,15 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
       }
       const buffer = new Uint8Array(arrayBuffer);
       await new Promise<void>((resolve, reject) => {
-        loader.parse(buffer.buffer, "", (model: any) => {
-          scene.add(model);
-          resolve();
-        }, (err: any) => reject(err));
+        loader.parse(
+          buffer.buffer,
+          "",
+          (model: any) => {
+            scene.add(model);
+            resolve();
+          },
+          (err: any) => reject(err)
+        );
       });
 
       let animId: number;
@@ -116,7 +128,7 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
       };
     } catch (err: any) {
       console.error("IFC viewer error", err);
-      setError("Kunne ikke laste IFC-viewer. Sjekk nettverk/wasm-tilgang.");
+      setError("Kunne ikke laste IFC-viewer. Sjekk at wasm er tilgjengelig (public/wasm) og at filen finnes.");
     } finally {
       setLoading(false);
     }
@@ -128,7 +140,7 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
         <div>
           <p className="text-sm font-semibold text-slate-800">IFC Viewer (eksperimentell)</p>
           <p className="text-xs text-slate-600">
-            Laster geometri i nettleseren via web-ifc. Filen mÃ¥ vÃ¦re lastet opp i denne Ã¸kten.
+            Laster geometri i nettleseren via web-ifc. Filen må være lastet opp i denne økten.
           </p>
         </div>
         <Button size="sm" onClick={loadViewer} disabled={loading}>
@@ -136,21 +148,16 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
           Last modell
         </Button>
       </div>
-      <div
-        ref={containerRef}
-        className="w-full h-[480px] rounded-lg border border-slate-200 bg-white overflow-hidden"
-      />
+      <div ref={containerRef} className="w-full h-[480px] rounded-lg border border-slate-200 bg-white overflow-hidden" />
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
       <p className="text-xs text-slate-500">
-        Viewer krever at wasm lastes fra {WASM_CDN}. For produksjon bÃ¸r wasm hostes lokalt.
+        Viewer prøver {WASM_LOCAL} først (fallback {WASM_CDN}). For produksjon bør wasm hostes lokalt.
       </p>
-      {modelName && (
-        <p className="text-xs text-slate-500">Modell: {modelName}</p>
-      )}
+      {modelName && <p className="text-xs text-slate-500">Modell: {modelName}</p>}
     </div>
   );
 }

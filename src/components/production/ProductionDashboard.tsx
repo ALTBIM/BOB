@@ -114,7 +114,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   const processFiles = (fileList: File[]) => {
     if (!selectedProject) {
-      setBanner({ type: "error", text: "Velg et prosjekt fra dropdown-menyen forst." });
+      setBanner({ type: "error", text: "Velg et prosjekt fra dropdown-menyen først." });
       return;
     }
 
@@ -771,3 +771,4 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     </div>
   );
 }
+
