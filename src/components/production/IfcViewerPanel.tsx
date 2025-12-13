@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 
-// Host wasm locally; fall back to CDN if needed
-const WASM_LOCAL = typeof window !== "undefined" ? `${window.location.origin}/wasm/` : "/wasm/";
+// Use CDN wasm by default to avoid 404 if /wasm is missing in prod
 const WASM_CDN = "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/";
 
 type Props = {
@@ -26,16 +25,6 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
       cleanupRef.current?.();
     };
   }, []);
-
-  const resolveWasmPath = async () => {
-    try {
-      const head = await fetch(`${WASM_LOCAL}web-ifc.wasm`, { method: "HEAD" });
-      if (head.ok) return WASM_LOCAL;
-    } catch (err) {
-      console.warn("WASM local probe failed, using CDN", err);
-    }
-    return WASM_CDN;
-  };
 
   const loadViewer = async () => {
     if ((!file && !fileUrl) || !containerRef.current) {
@@ -86,14 +75,13 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
       controls.update();
 
       const loader = new IFCLoader();
-      const wasmPath = await resolveWasmPath();
-      loader.ifcManager.setWasmPath(wasmPath);
+      loader.ifcManager.setWasmPath(WASM_CDN);
 
       let arrayBuffer: ArrayBuffer;
       if (file) {
         arrayBuffer = await file.arrayBuffer();
       } else {
-        const res = await fetch(fileUrl!);
+        const res = await fetch(fileUrl!, { cache: "no-store" });
         if (!res.ok) throw new Error(`Kunne ikke hente IFC fra URL (status ${res.status})`);
         arrayBuffer = await res.arrayBuffer();
       }
