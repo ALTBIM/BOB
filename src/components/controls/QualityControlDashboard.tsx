@@ -6,8 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Separator } from "@/components/ui/separator";
 import { CheckCircle, AlertTriangle, Clock, Users, Calendar, FileText, Settings } from "lucide-react";
 
 interface ControlFinding {
@@ -36,6 +34,7 @@ interface ControlResult {
 export default function QualityControlDashboard() {
   const [activeControls, setActiveControls] = useState<ControlResult[]>([]);
   const [selectedControl, setSelectedControl] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ type: "info" | "error"; text: string } | null>(null);
 
   // Mock control results
   const mockControls: ControlResult[] = [
@@ -171,18 +170,12 @@ export default function QualityControlDashboard() {
       suggestedDuration: "60 minutes"
     };
 
-    // Simulate meeting proposal generation
-    alert(`Meeting Proposal Generated:
-
-Title: ${meetingProposal.title}
-Participants: ${meetingProposal.participants.join(", ")}
-Priority: ${meetingProposal.priority}
-Duration: ${meetingProposal.suggestedDuration}
-
-Agenda:
-${meetingProposal.agenda.map((item, i) => `${i + 1}. ${item}`).join("\n")}
-
-This proposal can be copied to your calendar system.`);
+    setBanner({
+      type: "info",
+      text: `Møteforslag klar: ${meetingProposal.title}. Deltakere: ${meetingProposal.participants.join(
+        ", "
+      )}. Prioritet: ${meetingProposal.priority}. Varighet: ${meetingProposal.suggestedDuration}.`,
+    });
   };
 
   const getSeverityBadge = (severity: ControlFinding['severity']) => {
@@ -199,11 +192,11 @@ This proposal can be copied to your calendar system.`);
   const getStatusIcon = (status: ControlResult['status']) => {
     switch (status) {
       case 'completed':
-        return <CheckCircle className="h-5 w-5 text-green-600" />;
+        return <CheckCircle className="h-5 w-5 text-primary" />;
       case 'running':
-        return <Clock className="h-5 w-5 text-blue-600" />;
+        return <Clock className="h-5 w-5 text-muted-foreground" />;
       case 'pending':
-        return <Settings className="h-5 w-5 text-slate-400" />;
+        return <Settings className="h-5 w-5 text-muted-foreground" />;
     }
   };
 
@@ -213,6 +206,17 @@ This proposal can be copied to your calendar system.`);
 
   return (
     <div className="space-y-6">
+      {banner && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            banner.type === "error"
+              ? "border-destructive/40 bg-destructive/10 text-destructive"
+              : "border-border bg-muted text-foreground"
+          }`}
+        >
+          {banner.text}
+        </div>
+      )}
       {/* Control Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => runControl('requirement')}>

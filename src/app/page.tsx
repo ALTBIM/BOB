@@ -77,12 +77,11 @@ export default function LandingPage() {
       <style jsx>{`
         .landing-page {
           min-height: 100vh;
-          background: radial-gradient(circle at top, #1f2937 0, #020617 45%, #000 100%);
-          color: #f9fafb;
+          background: hsl(var(--background));
+          color: hsl(var(--foreground));
           display: flex;
           flex-direction: column;
           font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-          color-scheme: dark;
           padding: 0 1.5rem 1.5rem;
         }
 
@@ -106,16 +105,16 @@ export default function LandingPage() {
         .logo span {
           padding: 0.25rem 0.5rem;
           border-radius: 999px;
-          border: 1px solid #4b5563;
+          border: 1px solid hsl(var(--border));
           font-size: 0.75rem;
           margin-left: 0.5rem;
           opacity: 0.85;
         }
 
         .login-button {
-          border: 1px solid #4b5563;
-          color: #e5e7eb;
-          background: rgba(15, 23, 42, 0.7);
+          border: 1px solid hsl(var(--border));
+          color: hsl(var(--foreground));
+          background: hsl(var(--card));
           padding: 0.55rem 1.1rem;
           border-radius: 999px;
           text-decoration: none;
@@ -161,11 +160,11 @@ export default function LandingPage() {
           gap: 0.5rem;
           padding: 0.25rem 0.75rem;
           border-radius: 999px;
-          border: 1px solid #4b5563;
+          border: 1px solid hsl(var(--border));
           font-size: 0.75rem;
           text-transform: uppercase;
           letter-spacing: 0.14em;
-          color: #e5e7eb;
+          color: hsl(var(--foreground));
           margin-bottom: 1.25rem;
         }
 
@@ -173,8 +172,8 @@ export default function LandingPage() {
           width: 0.5rem;
           height: 0.5rem;
           border-radius: 999px;
-          background: #22c55e;
-          box-shadow: 0 0 12px rgba(34, 197, 94, 0.7);
+          background: hsl(var(--primary));
+          box-shadow: 0 0 12px rgba(0, 0, 0, 0.08);
         }
 
         h1 {
@@ -185,15 +184,13 @@ export default function LandingPage() {
 
         h1 span {
           display: block;
-          background: linear-gradient(120deg, #22c55e, #38bdf8, #a855f7);
-          -webkit-background-clip: text;
-          color: transparent;
+          color: hsl(var(--foreground));
         }
 
         .lead {
           font-size: 1rem;
           line-height: 1.6;
-          color: #d1d5db;
+          color: hsl(var(--muted-foreground));
           margin-bottom: 1.5rem;
           max-width: 34rem;
         }
@@ -324,4 +321,3 @@ export default function LandingPage() {
     </div>
   );
 }
-
