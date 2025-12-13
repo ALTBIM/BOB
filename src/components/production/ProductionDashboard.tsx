@@ -306,8 +306,8 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         const base = objects || 100;
         const qty = Math.max(1, Math.round((base / Math.max(4, materials.length + idx)) * 0.25));
         items.push({
-          id: \`item-\${materialType}-\${selectedModel}\`,
-          description: \`\${materialType} - Hele modellen\`,
+          id: `item-${materialType}-${selectedModel}`,
+          description: `${materialType} - Hele modellen`,
           quantity: qty,
           unit,
           zone: "Hele modellen",
@@ -318,10 +318,10 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       });
 
       const list: QuantityList = {
-        id: \`list-\${Date.now()}\`,
-        name: \`\${
+        id: `list-${Date.now()}`,
+        name: `${
           type === "quantities" ? "Mengdeliste" : type === "drawings" ? "Tegningsproduksjon" : "Modellkontroll"
-        } - \${new Date().toLocaleDateString("no-NO")}\`,
+        } - ${new Date().toLocaleDateString("no-NO")}`,
         type,
         items,
         totalQuantity: Math.round(totalQuantity * 100) / 100,
