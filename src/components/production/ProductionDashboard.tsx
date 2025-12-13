@@ -69,7 +69,6 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   const [existingFiles, setExistingFiles] = useState<ModelFile[]>([]);
   const [isDrawingExporting, setIsDrawingExporting] = useState(false);
   const [banner, setBanner] = useState<{ type: "info" | "error"; text: string } | null>(null);
-  const fallbackMaterials = ["betong", "stal", "tre", "glass", "gips", "isolasjon"];
 
   useEffect(() => {
     if (selectedProject) {
@@ -88,7 +87,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         (localFile?.materialList && localFile.materialList.length > 0
           ? localFile.materialList
           : getAvailableMaterialsForModel(selectedProject, selectedModel)) || [];
-      setAvailableMaterials(materials.length ? materials : fallbackMaterials);
+      setAvailableMaterials(materials);
       setSelectedMaterials([]);
     } else {
       setAvailableMaterials([]);
@@ -165,7 +164,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                 setFiles((prevFiles) =>
                   prevFiles.map((pf) => {
                     if (pf.id !== targetId) return pf;
-                    const materials = parsed.materials.length ? parsed.materials : fallbackMaterials.slice(0, 4);
+                    const materials = parsed.materials || [];
                     const completedFile: ModelFile = {
                       ...pf,
                       status: "completed",
@@ -220,7 +219,9 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         storageUrl: file.storageUrl || file.fileUrl,
         description: "IFC-fil lastet opp i denne økten",
       });
-      recordModelMaterials(file.projectId, created.id, materials);
+      if (materials.length) {
+        recordModelMaterials(file.projectId, created.id, materials);
+      }
       // lagre metadata til server/fil for senere visning
       fetch("/api/ifc/metadata", {
         method: "POST",
@@ -287,10 +288,15 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     materialsOverride?: string[]
   ) => {
     const materials = materialsOverride ?? selectedMaterials;
-    if (!selectedModel || materials.length === 0) {
-      setBanner({ type: "error", text: "Velg modell og minst ett materiale fÃ¸rst." });
+    if (!selectedModel) {
+      setBanner({ type: "error", text: "Velg modell først." });
       return;
     }
+    if (materials.length === 0) {
+      setBanner({ type: "error", text: "Ingen materialer funnet i IFC. Last opp en fil med materialdata." });
+      return;
+    }
+
 
     setIsGenerating(true);
 
@@ -306,9 +312,9 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       const items: QuantityItem[] = [];
       let totalQuantity = 0;
 
-      materials.forEach((materialType, idx) => {
-        const base = objects || 100;
-        const qty = Math.max(1, Math.round((base / Math.max(4, materials.length + idx)) * 0.25));
+      materials.forEach((materialType) => {
+        const base = objects || 1;
+        const qty = hasRealData ? Math.max(1, Math.round(base / Math.max(1, materials.length))) : 1;
         items.push({
           id: `item-${materialType}-${selectedModel}`,
           description: `${materialType} - Hele modellen`,
@@ -351,8 +357,11 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       setBanner({ type: "error", text: "Velg modell først." });
       return;
     }
-    const sourceMaterials = availableMaterials.length > 0 ? availableMaterials : fallbackMaterials;
-    generateQuantityList("quantities", sourceMaterials);
+    if (availableMaterials.length === 0) {
+      setBanner({ type: "error", text: "Ingen materialer funnet i IFC." });
+      return;
+    }
+    generateQuantityList("quantities", availableMaterials);
   };
 
   const downloadList = (format: "csv" | "excel" | "pdf") => {
@@ -771,6 +780,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     </div>
   );
 }
+
 
 
 
