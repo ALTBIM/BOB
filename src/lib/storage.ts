@@ -101,6 +101,50 @@ export const listIfcFiles = async (projectId: string) => {
     });
 };
 
+export const uploadGenericFile = async (file: File, projectId: string, description?: string) => {
+  if (typeof window !== "undefined") {
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("projectId", projectId);
+      if (description) form.append("description", description);
+      const res = await fetch("/api/files/upload", { method: "POST", body: form, cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          path: data.path as string,
+          publicUrl: data.publicUrl as string,
+          provider: data.provider as string,
+          fileId: data.fileId as string | undefined,
+          category: data.category as string | undefined,
+        };
+      }
+      const err = await res.json().catch(() => ({}));
+      console.warn("API generic upload feilet", err);
+    } catch (err) {
+      console.warn("API generic upload feilet", err);
+    }
+  }
+
+  if (!client) {
+    console.warn("Ingen lagring konfigurert (hverken API eller Supabase anon).");
+    return null;
+  }
+
+  const path = `${projectId}/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+  const { error } = await client.storage.from(FILE_BUCKET).upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+    contentType: file.type || "application/octet-stream",
+  });
+  if (error) {
+    console.error("Supabase upload error", error);
+    return null;
+  }
+  const { data } = client.storage.from(FILE_BUCKET).getPublicUrl(path);
+  return { path, publicUrl: data.publicUrl, provider: "supabase", fileId: undefined, category: undefined };
+};
+
 export const listAllFiles = async (projectId: string) => {
   // Server API handles Supabase service key; falls back to anon storage
   try {
