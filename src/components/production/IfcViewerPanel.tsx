@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ export function IfcViewerPanel({ file, modelName }: Props) {
 
   const loadViewer = async () => {
     if (!file || !containerRef.current) {
-      setError("Ingen IFC-fil tilgjengelig i minnet. Last opp en fil i denne økten.");
+      setError("Ingen IFC-fil tilgjengelig i minnet. Last opp en fil i denne Ã¸kten.");
       return;
     }
 
@@ -36,7 +36,7 @@ export function IfcViewerPanel({ file, modelName }: Props) {
     try {
       const [{ default: THREE }, { IFCLoader }] = await Promise.all([
         import("three"),
-        import("three/examples/jsm/loaders/IFCLoader.js"),
+        import("three/examples/jsm/loaders/IFCLoader"),
       ]);
 
       const width = containerRef.current.clientWidth || 640;
@@ -66,7 +66,7 @@ export function IfcViewerPanel({ file, modelName }: Props) {
       const grid = new THREE.GridHelper(20, 20, 0xe2e8f0, 0xe2e8f0);
       scene.add(grid);
 
-      const controlsModule = await import("three/examples/jsm/controls/OrbitControls.js");
+      const controlsModule = await import("three/examples/jsm/controls/OrbitControls");
       const OrbitControls = (controlsModule as any).OrbitControls || controlsModule.default;
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.target.set(0, 1, 0);
@@ -120,7 +120,7 @@ export function IfcViewerPanel({ file, modelName }: Props) {
         <div>
           <p className="text-sm font-semibold text-slate-800">IFC Viewer (eksperimentell)</p>
           <p className="text-xs text-slate-600">
-            Laster geometri i nettleseren via web-ifc. Filen må være lastet opp i denne økten.
+            Laster geometri i nettleseren via web-ifc. Filen mÃ¥ vÃ¦re lastet opp i denne Ã¸kten.
           </p>
         </div>
         <Button size="sm" onClick={loadViewer} disabled={loading}>
@@ -138,7 +138,7 @@ export function IfcViewerPanel({ file, modelName }: Props) {
         </Alert>
       )}
       <p className="text-xs text-slate-500">
-        Viewer krever at wasm lastes fra {WASM_CDN}. For produksjon bør wasm hostes lokalt.
+        Viewer krever at wasm lastes fra {WASM_CDN}. For produksjon bÃ¸r wasm hostes lokalt.
       </p>
       {modelName && (
         <p className="text-xs text-slate-500">Modell: {modelName}</p>
@@ -146,3 +146,5 @@ export function IfcViewerPanel({ file, modelName }: Props) {
     </div>
   );
 }
+
+

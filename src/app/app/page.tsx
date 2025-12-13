@@ -28,6 +28,7 @@ import ProjectManagement from "@/components/admin/ProjectManagement";
 import { User, Project, db, getRoleDisplayName } from "@/lib/database";
 import { useSession } from "@/lib/session";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { DocumentIngestPanel } from "@/components/rag/DocumentIngestPanel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -407,6 +408,7 @@ export default function HomePage() {
               )}
             </div>
             <QualityControlDashboard selectedProject={selectedProject} />
+            {selectedProject && <DocumentIngestPanel projectId={selectedProject} />}
           </TabsContent>
 
           <TabsContent value="users" className="space-y-6">
