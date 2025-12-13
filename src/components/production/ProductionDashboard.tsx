@@ -100,10 +100,6 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     if (!selectedProject) return;
 
     try {
-      const models = await db.getBIMModelsByProject(selectedProject);
-      const completedModels = models.filter((m) => m.status === "completed");
-
-      // Hent eksisterende filer fra Supabase-bucket for persistens
       const stored = await listIfcFiles(selectedProject);
       const storedFiles: ModelFile[] = stored.map((item) => ({
         id: item.path,
@@ -118,15 +114,8 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         fileUrl: item.publicUrl,
         storageUrl: item.publicUrl,
       }));
-      setExistingFiles((prev) => {
-        const merged = [...prev];
-        storedFiles.forEach((sf) => {
-          if (!merged.find((f) => f.id === sf.id)) merged.push(sf);
-        });
-        return merged;
-      });
+      setExistingFiles(storedFiles);
 
-      // Legg til minimal BIMModel for lagrede filer hvis de ikke finnes i mock-databasen
       const storageModels: BIMModel[] = stored.map((item) => ({
         id: item.path,
         name: item.name,
@@ -140,15 +129,10 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         storageUrl: item.publicUrl,
       }));
 
-      const combined = [...completedModels];
-      storageModels.forEach((sm) => {
-        if (!combined.find((m) => m.id === sm.id)) combined.push(sm);
-      });
+      setAvailableModels(storageModels);
 
-      setAvailableModels(combined);
-
-      if (combined.length > 0 && !selectedModel) {
-        setSelectedModel(combined[0].id);
+      if (storageModels.length > 0 && !selectedModel) {
+        setSelectedModel(storageModels[0].id);
       }
     } catch (error) {
       console.error("Failed to load models:", error);

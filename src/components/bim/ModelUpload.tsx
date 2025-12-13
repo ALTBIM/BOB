@@ -63,24 +63,6 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
 
     const loadExisting = async () => {
       try {
-        const models = await db.getBIMModelsByProject(selectedProject);
-        const modelFiles: ModelFile[] = models.map((m) => ({
-          id: m.id,
-          name: m.filename || m.name,
-          size: m.size || 0,
-          type: "application/octet-stream",
-          status: m.status,
-          progress: m.status === "completed" ? 100 : 0,
-          projectId: m.projectId,
-          uploadedAt: m.uploadedAt || new Date().toISOString(),
-          uploadedBy: m.uploadedBy,
-          objects: m.objects,
-          zones: m.zones,
-          materials: m.materials,
-          storageUrl: m.storageUrl,
-          fileUrl: m.storageUrl
-        }));
-
         const stored = await listIfcFiles(selectedProject);
         const storedFiles: ModelFile[] = stored.map((item) => ({
           id: item.id || item.path,
@@ -99,8 +81,8 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
         }));
 
         const merged = new Map<string, ModelFile>();
-        [...modelFiles, ...storedFiles].forEach((f) => {
-          merged.set(f.id, f);
+        storedFiles.forEach((f) => {
+          if (f.storageUrl) merged.set(f.id, f);
         });
         setExistingFiles(Array.from(merged.values()));
       } catch (err) {
@@ -469,67 +451,69 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {getProjectFiles().map((file) => {
-                  const downloadUrl = file.storageUrl || file.fileUrl;
-                  return (
-                    <div key={file.id} className="border rounded-lg p-4 hover:bg-slate-50 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                            <FileText className="w-5 h-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <h4 className="font-medium">{file.name}</h4>
-                            <div className="flex items-center space-x-4 text-sm text-slate-500">
-                              <span>{formatFileSize(file.size)}</span>
-                              <span className="flex items-center">
-                                <User className="w-3 h-3 mr-1" />
-                                {file.uploadedBy}
-                              </span>
-                              <span className="flex items-center">
-                                <Calendar className="w-3 h-3 mr-1" />
-                                {formatDate(file.uploadedAt)}
-                              </span>
+                {getProjectFiles()
+                  .filter((file) => file.storageUrl)
+                  .map((file) => {
+                    const downloadUrl = file.storageUrl || file.fileUrl;
+                    return (
+                      <div key={file.id} className="border rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                              <FileText className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-medium">{file.name}</h4>
+                              <div className="flex items-center space-x-4 text-sm text-slate-500">
+                                <span>{formatFileSize(file.size)}</span>
+                                <span className="flex items-center">
+                                  <User className="w-3 h-3 mr-1" />
+                                  {file.uploadedBy}
+                                </span>
+                                <span className="flex items-center">
+                                  <Calendar className="w-3 h-3 mr-1" />
+                                  {formatDate(file.uploadedAt)}
+                                </span>
+                              </div>
                             </div>
                           </div>
+
+                          <div className="flex items-center space-x-2">
+                            <Badge variant={file.status === "completed" ? "default" : "secondary"}>
+                              {file.status === "completed" ? "Ferdig" : file.status}
+                            </Badge>
+                            <Button variant="ghost" size="sm" asChild disabled={!downloadUrl}>
+                              <a
+                                href={downloadUrl}
+                                download={file.name}
+                                rel="noreferrer"
+                                title={downloadUrl ? "Last ned IFC" : "Ingen fil-URL"}
+                              >
+                                <Download className="w-4 h-4" />
+                              </a>
+                            </Button>
+                          </div>
                         </div>
 
-                        <div className="flex items-center space-x-2">
-                          <Badge variant={file.status === "completed" ? "default" : "secondary"}>
-                            {file.status === "completed" ? "Ferdig" : file.status}
-                          </Badge>
-                          <Button variant="ghost" size="sm" asChild disabled={!downloadUrl}>
-                            <a
-                              href={downloadUrl}
-                              download={file.name}
-                              rel="noreferrer"
-                              title={downloadUrl ? "Last ned IFC" : "Ingen fil-URL"}
-                            >
-                              <Download className="w-4 h-4" />
-                            </a>
-                          </Button>
-                        </div>
+                        {file.status === "completed" && (
+                          <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
+                            <div className="text-center">
+                              <div className="text-lg font-semibold text-blue-600">{file.objects}</div>
+                              <div className="text-xs text-slate-500">Objekter</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-semibold text-green-600">{file.zones}</div>
+                              <div className="text-xs text-slate-500">Soner</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-semibold text-orange-600">{file.materials}</div>
+                              <div className="text-xs text-slate-500">Materialer</div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-
-                      {file.status === "completed" && (
-                        <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
-                          <div className="text-center">
-                            <div className="text-lg font-semibold text-blue-600">{file.objects}</div>
-                            <div className="text-xs text-slate-500">Objekter</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-lg font-semibold text-green-600">{file.zones}</div>
-                            <div className="text-xs text-slate-500">Soner</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-lg font-semibold text-orange-600">{file.materials}</div>
-                            <div className="text-xs text-slate-500">Materialer</div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
 
                 {getProjectFiles().length === 0 && (
                   <div className="text-center py-8">
