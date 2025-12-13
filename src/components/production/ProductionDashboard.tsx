@@ -109,7 +109,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   const processFiles = (fileList: File[]) => {
     if (!selectedProject) {
-      alert("Velg et prosjekt fra dropdown-menyen først");
+      alert("Velg et prosjekt fra dropdown-menyen f\u00f8rst");
       return;
     }
 
@@ -203,7 +203,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         objects: file.objects,
         zones: file.zones,
         materials: materials.length,
-        description: "IFC fil lastet opp i denne økten",
+        description: "IFC-fil lastet opp i denne \u00f8kten",
       });
       recordModelMaterials(file.projectId, created.id, materials);
     } catch (error) {
@@ -260,7 +260,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   ) => {
     const materials = materialsOverride ?? selectedMaterials;
     if (!selectedModel || materials.length === 0) {
-      alert("Velg modell og materialer først");
+      alert("Velg modell og materialer f\u00f8rst");
       return;
     }
 
@@ -284,7 +284,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
           unit,
           zone: "Hele modellen",
           material: materialType,
-          notes: "Forenklet beregning basert på IFC-tekstlesing (ikke full geometri).",
+          notes: "Forenklet beregning basert p\u00e5 IFC-tekstlesing (ikke full geometri)."
         });
         totalQuantity += quantity;
       });
@@ -315,7 +315,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   const handleFullExtraction = () => {
     if (!selectedModel) {
-      alert("Velg modell først");
+      alert("Velg modell f\u00f8rst");
       return;
     }
     const sourceMaterials = availableMaterials.length > 0 ? availableMaterials : fallbackMaterials;
@@ -368,7 +368,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   const generateDrawingSvg = () => {
     if (!selectedModel) {
-      alert("Velg modell først");
+      alert("Velg modell f\u00f8rst");
       return;
     }
     const model = availableModels.find((m) => m.id === selectedModel);
@@ -403,8 +403,8 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     .subtitle { font-family: Arial; font-size: 12px; fill: #334155; }
   </style>
   <rect width="100%" height="100%" fill="#fff"/>
-  <text x="30" y="32" class="title">Arbeidstegning – ${model.name || model.filename}</text>
-  <text x="30" y="52" class="subtitle">Objekter: ${model.objects ?? "ukjent"} • Rom/soner: ${model.zones ?? "ukjent"} • Materialer: ${model.materials ?? "ukjent"}</text>
+  <text x="30" y="32" class="title">Arbeidstegning - ${model.name || model.filename}</text>
+  <text x="30" y="52" class="subtitle">Objekter: ${model.objects ?? "ukjent"} \u2022 Rom/soner: ${model.zones ?? "ukjent"} \u2022 Materialer: ${model.materials ?? "ukjent"}</text>
   ${rects}
 </svg>`;
 
@@ -431,7 +431,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         <CardContent className="text-center py-12">
           <Building2 className="w-12 h-12 text-slate-400 mx-auto mb-4" />
           <h3 className="font-medium text-slate-900 mb-2">Ingen prosjekt valgt</h3>
-          <p className="text-slate-600">Velg et prosjekt fra dropdown-menyen øverst for å bruke produksjonsverktøyene</p>
+          <p className="text-slate-600">Velg et prosjekt fra dropdown-menyen \u00f8verst for \u00e5 bruke produksjonsverkt\u00f8yene</p>
         </CardContent>
       </Card>
     );
@@ -476,7 +476,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                   <div className="p-4 border border-dashed rounded-lg text-center">
                     <FileText className="w-8 h-8 text-slate-400 mx-auto mb-2" />
                     <p className="text-slate-600">Ingen IFC-filer tilgjengelig</p>
-                    <p className="text-sm text-slate-500">Last opp en IFC-fil først</p>
+                    <p className="text-sm text-slate-500">Last opp en IFC-fil f\u00f8rst</p>
                   </div>
                 )}
               </div>
@@ -486,11 +486,11 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">Soner og etasjer</CardTitle>
-                      <CardDescription>Foreløpig genereres mengder for hele modellen</CardDescription>
+                      <CardDescription>Forel\u00f8pig genereres mengder for hele modellen</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <p className="text-sm text-slate-600">
-                        Soner og etasjer vil bli hentet fra IFC-modellen når dette er koblet opp. Foreløpig kan du kun
+                        Soner og etasjer vil bli hentet fra IFC-modellen n\u00e5r dette er koblet opp. Forel\u00f8pig kan du kun
                         generere mengder for hele modellen.
                       </p>
                     </CardContent>
@@ -504,7 +504,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                     <CardContent className="space-y-3">
                       {availableMaterials.length === 0 && (
                         <p className="text-sm text-slate-600">
-                          Ingen materialer ble funnet. Du kan prøve “Fullt uttrekk” (bruker fallback).
+                          Ingen materialer ble funnet. Du kan pr\u00f8ve "Fullt uttrekk" (bruker fallback).
                         </p>
                       )}
 
@@ -579,8 +579,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                   <div>
                     <CardTitle>{generatedList.name}</CardTitle>
                     <CardDescription>
-                      {generatedList.items.length} posisjoner • Total: {generatedList.totalQuantity}{" "}
-                      {generatedList.unit}
+                      {generatedList.items.length} posisjoner \u2022 Total: {generatedList.totalQuantity} {generatedList.unit}
                     </CardDescription>
                   </div>
                   <div className="flex space-x-2">
@@ -641,14 +640,14 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
             <CardHeader>
               <CardTitle>Tegningsproduksjon</CardTitle>
               <CardDescription>
-                Enkel SVG-generering basert på IFC-metadata (ikke full geometri). Brukes som midlertidig arbeidstegning.
+                Enkel SVG-generering basert p\u00e5 IFC-metadata (ikke full geometri). Brukes som midlertidig arbeidstegning.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {availableModels.length === 0 ? (
                 <div className="text-center py-8">
                   <Image className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                  <p className="text-slate-600">Ingen modeller tilgjengelig. Last opp en IFC først.</p>
+                  <p className="text-slate-600">Ingen modeller tilgjengelig. Last opp en IFC f\u00f8rst.</p>
                 </div>
               ) : (
                 <>
