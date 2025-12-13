@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { MessageCircle, Search, Send, Plus, Trash2 } from "lucide-react";
@@ -400,9 +400,9 @@ export default function ChatPage() {
           </div>
           {activeSources.length === 0 ? (
             <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Ingen kilder mottatt ennå. Legg til dokumenter/IFC eller kontroller prosjekt-ID.
             </p>
-          ) : (
             <div className="space-y-2">
               {activeSources.map((s, idx) => (
                 <div key={s.id} className="rounded border border-border bg-card p-2">
@@ -418,9 +418,9 @@ export default function ChatPage() {
                   {s.zone && <div className="text-[10px] text-muted-foreground mt-1">Sone: {s.zone}</div>}
                 </div>
               ))}
-            </div>
-          )}
-        </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            BOB foreslår neste steg og bruker prosjektets kontekst. Kilder vises når dokumenter er koblet på.
+          </p>
 
         <footer className="border-t border-border p-4">
           <div className="flex items-center gap-2">
