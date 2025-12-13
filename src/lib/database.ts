@@ -48,6 +48,7 @@ export interface BIMModel {
   objects?: number;
   zones?: number;
   materials?: number;
+  storageUrl?: string;
   version: number;
   description?: string;
 }

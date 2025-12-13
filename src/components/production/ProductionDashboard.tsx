@@ -55,6 +55,7 @@ interface ModelFile {
   rawFile?: File;
   materialList?: string[];
   fileUrl?: string;
+  storageUrl?: string;
 }
 
 export default function ProductionDashboard({ selectedProject }: ProductionDashboardProps) {
@@ -81,7 +82,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   useEffect(() => {
     if (selectedProject && selectedModel) {
-      // prøv fra lokal parsed data først
+      // try local parsed data first
       const localFile = existingFiles.find((f) => f.id === selectedModel && f.projectId === selectedProject);
       const materials =
         (localFile?.materialList && localFile.materialList.length > 0
@@ -113,7 +114,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   const processFiles = (fileList: File[]) => {
     if (!selectedProject) {
-      setBanner({ type: "error", text: "Velg et prosjekt fra dropdown-menyen fÃ¸rst." });
+      setBanner({ type: "error", text: "Velg et prosjekt fra dropdown-menyen forst." });
       return;
     }
 
@@ -138,6 +139,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       uploadedBy: "Andreas Hansen",
       rawFile: file,
       fileUrl: URL.createObjectURL(file),
+      storageUrl: URL.createObjectURL(file),
     }));
 
     setFiles((prev) => [...prev, ...newFiles]);
@@ -172,6 +174,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                       zones: parsed.spaceCount || pf.zones || Math.floor(Math.random() * 20) + 5,
                       materials: materials.length,
                       materialList: materials,
+                      storageUrl: pf.storageUrl || pf.fileUrl,
                     };
                     persistModelToStore(completedFile, materials);
                     // oppdater tilgjengelige materialer i UI
@@ -214,6 +217,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         objects: file.objects,
         zones: file.zones,
         materials: materials.length,
+        storageUrl: file.storageUrl || file.fileUrl,
         description: "IFC-fil lastet opp i denne \u00f8kten",
       });
       recordModelMaterials(file.projectId, created.id, materials);
@@ -732,7 +736,11 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                     <p className="pt-2">2) Se geometri (eksperimentell web-ifc viewer)</p>
                     <IfcViewerPanel
                       file={existingFiles.find((f) => f.id === selectedModel)?.rawFile}
-                      fileUrl={existingFiles.find((f) => f.id === selectedModel)?.fileUrl}
+                      fileUrl={
+                        existingFiles.find((f) => f.id === selectedModel)?.fileUrl ||
+                        existingFiles.find((f) => f.id === selectedModel)?.storageUrl ||
+                        availableModels.find((m) => m.id === selectedModel)?.storageUrl
+                      }
                       modelName={availableModels.find((m) => m.id === selectedModel)?.name}
                     />
                   </div>
