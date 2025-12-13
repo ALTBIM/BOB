@@ -53,6 +53,7 @@ interface ModelFile {
   uploadedAt: string;
   uploadedBy: string;
   rawFile?: File;
+  materialList?: string[];
 }
 
 export default function ProductionDashboard({ selectedProject }: ProductionDashboardProps) {
@@ -79,18 +80,19 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   useEffect(() => {
     if (selectedProject && selectedModel) {
-      const materials = getAvailableMaterialsForModel(selectedProject, selectedModel);
-      if (materials.length === 0) {
-        setAvailableMaterials(fallbackMaterials);
-      } else {
-        setAvailableMaterials(materials);
-      }
+      // prøv fra lokal parsed data først
+      const localFile = existingFiles.find((f) => f.id === selectedModel && f.projectId === selectedProject);
+      const materials =
+        (localFile?.materialList && localFile.materialList.length > 0
+          ? localFile.materialList
+          : getAvailableMaterialsForModel(selectedProject, selectedModel)) || [];
+      setAvailableMaterials(materials.length ? materials : fallbackMaterials);
       setSelectedMaterials([]);
     } else {
       setAvailableMaterials([]);
       setSelectedMaterials([]);
     }
-  }, [selectedProject, selectedModel]);
+  }, [selectedProject, selectedModel, existingFiles]);
 
   const loadProjectModels = async () => {
     if (!selectedProject) return;
@@ -167,8 +169,14 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                       objects: parsed.objectCount || pf.objects || Math.floor(Math.random() * 5000) + 1000,
                       zones: parsed.spaceCount || pf.zones || Math.floor(Math.random() * 20) + 5,
                       materials: materials.length,
+                      materialList: materials,
                     };
                     persistModelToStore(completedFile, materials);
+                    // oppdater tilgjengelige materialer i UI
+                    if (pf.projectId === selectedProject) {
+                      setAvailableMaterials(materials);
+                      setSelectedMaterials([]);
+                    }
                     setExistingFiles((existing) => [...existing, { ...completedFile }]);
                     return completedFile;
                   })
@@ -207,6 +215,19 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         description: "IFC-fil lastet opp i denne \u00f8kten",
       });
       recordModelMaterials(file.projectId, created.id, materials);
+      // lagre metadata til server/fil for senere visning
+      fetch("/api/ifc/metadata", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: file.projectId,
+          modelId: created.id,
+          name: created.name || created.filename,
+          materials,
+          objects: file.objects,
+          zones: file.zones,
+        }),
+      }).catch((err) => console.error("Kunne ikke lagre IFC-metadata", err));
     } catch (error) {
       console.error("Kunne ikke lagre modell i database", error);
     }
