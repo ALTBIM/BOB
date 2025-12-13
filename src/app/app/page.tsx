@@ -120,7 +120,7 @@ export default function HomePage() {
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Søk prosjekter, brukere, filer..."
+                  placeholder="S\u00f8k prosjekter, brukere, filer..."
                   className="pl-10 bg-muted border-border/70"
                 />
               </div>
@@ -173,7 +173,7 @@ export default function HomePage() {
                     <div className="hidden sm:flex flex-col items-start leading-tight">
                       <span className="text-sm font-semibold">{user.name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {getRoleDisplayName(user.role)} • {user.company}
+                        {getRoleDisplayName(user.role)} \u2022 {user.company}
                       </span>
                     </div>
                     <div className="h-9 w-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
@@ -203,7 +203,7 @@ export default function HomePage() {
                     <span className="text-sm font-medium">Selskap</span>
                     <span className="text-xs text-muted-foreground">{user.company}</span>
                   </DropdownMenuItem>
-                    <DropdownMenuItem className="flex flex-col items-start" disabled={!selectedProject}>
+                  <DropdownMenuItem className="flex flex-col items-start" disabled={!selectedProject}>
                     <span className="text-sm font-medium">Prosjekt</span>
                     <span className="text-xs text-muted-foreground">
                       {selectedProject ? projects.find((p) => p.id === selectedProject)?.name : "Ingen valgt"}
@@ -230,8 +230,8 @@ export default function HomePage() {
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-foreground mb-2">Velkommen til BOB</h2>
           <p className="text-lg text-muted-foreground max-w-3xl">
-            Ditt digitale verktøy for byggeprosjekter som kobler BIM-modeller direkte til produksjon, logistikk og
-            prosjektstyring. Generer mengdelister, lag arbeidstegninger og administrer kvalitetskontroller på ett sted.
+            Ditt digitale verkt\u00f8y for byggeprosjekter som kobler BIM-modeller direkte til produksjon, logistikk og
+            prosjektstyring. Generer mengdelister, lag arbeidstegninger og administrer kvalitetskontroller p\u00e5 ett sted.
           </p>
         </div>
 
@@ -242,7 +242,7 @@ export default function HomePage() {
               <p className="text-amber-800 dark:text-amber-100 font-medium">Ingen prosjekt valgt</p>
             </div>
             <p className="text-amber-700 dark:text-amber-200 text-sm mt-1">
-              Velg et prosjekt fra dropdown-menyen over for å få tilgang til BIM-modeller, produksjonsverktøy og kontroller.
+              Velg et prosjekt fra dropdown-menyen over for \u00e5 f\u00e5 tilgang til BIM-modeller, produksjonsverkt\u00f8y og kontroller.
             </p>
           </div>
         )}
@@ -267,7 +267,7 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold tracking-tight">24</div>
-              <p className="text-xs text-muted-foreground">Denne måneden</p>
+              <p className="text-xs text-muted-foreground">Denne m\u00e5neden</p>
             </CardContent>
           </Card>
           <Card className="border border-border bg-card shadow-none">
@@ -277,12 +277,12 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold tracking-tight">12</div>
-              <p className="text-xs text-muted-foreground">8 bestått, 4 venter</p>
+              <p className="text-xs text-muted-foreground">8 best\u00e5tt, 4 venter</p>
             </CardContent>
           </Card>
           <Card className="border border-border bg-card shadow-none">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Planlagte møter</CardTitle>
+              <CardTitle className="text-sm font-medium">Planlagte m\u00f8ter</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
