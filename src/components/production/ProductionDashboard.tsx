@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   const [files, setFiles] = useState<ModelFile[]>([]);
   const [existingFiles, setExistingFiles] = useState<ModelFile[]>([]);
   const [isDrawingExporting, setIsDrawingExporting] = useState(false);
+  const [banner, setBanner] = useState<{ type: "info" | "error"; text: string } | null>(null);
   const fallbackMaterials = ["betong", "stal", "tre", "glass", "gips", "isolasjon"];
 
   useEffect(() => {
@@ -109,7 +110,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   const processFiles = (fileList: File[]) => {
     if (!selectedProject) {
-      alert("Velg et prosjekt fra dropdown-menyen f\u00f8rst");
+      setBanner({ type: "error", text: "Velg et prosjekt fra dropdown-menyen fÃ¸rst." });
       return;
     }
 
@@ -118,7 +119,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     );
 
     if (validFiles.length === 0) {
-      alert("Velg gyldige IFC-filer (.ifc eller .ifczip)");
+      setBanner({ type: "error", text: "Velg gyldige IFC-filer (.ifc eller .ifczip)." });
       return;
     }
 
@@ -260,7 +261,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   ) => {
     const materials = materialsOverride ?? selectedMaterials;
     if (!selectedModel || materials.length === 0) {
-      alert("Velg modell og materialer f\u00f8rst");
+      setBanner({ type: "error", text: "Velg modell og minst ett materiale fÃ¸rst." });
       return;
     }
 
@@ -307,7 +308,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       }
     } catch (error) {
       console.error("Failed to generate list:", error);
-      alert("Feil ved generering av liste");
+      setBanner({ type: "error", text: "Feil ved generering av liste." });
     } finally {
       setIsGenerating(false);
     }
@@ -315,7 +316,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   const handleFullExtraction = () => {
     if (!selectedModel) {
-      alert("Velg modell f\u00f8rst");
+      setBanner({ type: "error", text: "Velg modell først." });
       return;
     }
     const sourceMaterials = availableMaterials.length > 0 ? availableMaterials : fallbackMaterials;
@@ -358,22 +359,22 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
       } else {
-        alert(`${format.toUpperCase()}-export kommer i neste versjon`);
+        setBanner({ type: "info", text: `${format.toUpperCase()}-eksport kommer i neste versjon.` });
       }
     } catch (error) {
       console.error("Download failed:", error);
-      alert("Nedlasting feilet");
+      setBanner({ type: "error", text: "Nedlasting feilet." });
     }
   };
 
   const generateDrawingSvg = () => {
     if (!selectedModel) {
-      alert("Velg modell f\u00f8rst");
+      setBanner({ type: "error", text: "Velg modell først." });
       return;
     }
     const model = availableModels.find((m) => m.id === selectedModel);
     if (!model) {
-      alert("Fant ikke valgt modell");
+      setBanner({ type: "error", text: "Fant ikke valgt modell." });
       return;
     }
     setIsDrawingExporting(true);
@@ -423,7 +424,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Kunne ikke generere tegning", err);
-      alert("Kunne ikke generere tegning (SVG).");
+      setBanner({ type: "error", text: "Kunne ikke generere tegning (SVG)." });
     } finally {
       setIsDrawingExporting(false);
     }
@@ -443,6 +444,17 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   return (
     <div className="space-y-6">
+      {banner && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            banner.type === "error"
+              ? "border-destructive/40 bg-destructive/10 text-destructive"
+              : "border-border bg-muted text-foreground"
+          }`}
+        >
+          {banner.text}
+        </div>
+      )}
       <Tabs defaultValue="quantities" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="quantities">Mengdelister</TabsTrigger>

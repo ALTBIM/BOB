@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { logInteraction } from "@/lib/logger";
 import { retrieveContext, RetrievedSource } from "@/lib/rag";
 
-// Bruk node runtime for a unngaa edge-advarsel om statisk generering
+// Node runtime for SSE-streaming
 export const runtime = "nodejs";
 
 const systemPrompt = `
@@ -12,7 +12,7 @@ Du er BOB, en faglig, prosjekt-isolert assistent for bygg/BIM.
 - Vær faktabasert og presis. Ingen gjetting eller tall uten kilde. Marker tydelig hvis data mangler.
 - Hvis ingen kilder finnes, si eksplisitt at kilder mangler og foreslå hvilke dokumenter/IFC/standarder som trengs.
 - Rolle-tilpasning: tilpass vinkling etter brukerrolle, men hold nøkternt og profesjonelt.
-- Tone: Kort, profesjonell, neutral. Ikke småprat.`;
+- Tone: Kort, profesjonell, nøytral. Ikke småprat.`;
 
 type ChatMemory = { id: string; text: string };
 
@@ -27,14 +27,9 @@ function buildUserPrompt(params: {
 }) {
   const { message, projectId, role, style, withSources, memory, contextText } = params;
 
-  const memoryText = memory?.length
-    ? memory.map((m) => `- ${m.text}`).join("\n")
-    : "Ingen ekstra prosjektkontekst oppgitt.";
-
+  const memoryText = memory?.length ? memory.map((m) => `- ${m.text}`).join("\n") : "Ingen ekstra prosjektkontekst oppgitt.";
   const styleText = style === "detaljert" ? "Detaljert, men konsis." : "Kortfattet.";
-  const sourceText = withSources
-    ? "Ta med kilde-IDer i del 2."
-    : "Hvis kilder finnes, referer kort uten å liste alt.";
+  const sourceText = withSources ? "Ta med kilde-IDer i del 2." : "Hvis kilder finnes, referer kort uten å liste alt.";
 
   return `
 Prosjekt-ID: ${projectId}
@@ -45,7 +40,7 @@ Tilgjengelige kilder/utdrag:
 ${contextText}
 Prosjektminne:
 ${memoryText}
-Brukersporsmal:
+Brukerspørsmål:
 ${message}
 
 Gi svaret med fire overskrifter som beskrevet i systemprompten.`;
@@ -88,7 +83,7 @@ function streamSyntheticAnswer(
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const message: string = body?.message ?? "";
-  const projectId: string = body?.projectId ?? "ukjent-prosjekt";
+  const projectId: string = body?.projectId ?? "";
   const style: string = body?.style ?? "kort";
   const withSources: boolean = Boolean(body?.sources ?? true);
   const memory: ChatMemory[] = body?.memory ?? [];
@@ -97,6 +92,10 @@ export async function POST(request: Request) {
 
   if (!message.trim()) {
     return NextResponse.json({ error: "Melding mangler." }, { status: 400 });
+  }
+
+  if (!projectId) {
+    return NextResponse.json({ error: "Prosjekt-ID mangler." }, { status: 400 });
   }
 
   const { sources: retrievedSources, contextText } = await retrieveContext(projectId, message, {
@@ -185,13 +184,11 @@ export async function POST(request: Request) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      // Send kildemetadata først slik at klient kan vise dem uavhengig av modellrespons
+      // send kildemetadata først slik klient kan vise dem uavhengig av modellrespons
       try {
-        controller.enqueue(
-          encoder.encode(`data: SOURCES::${JSON.stringify(retrievedSources)}\n\n`)
-        );
+        controller.enqueue(encoder.encode(`data: SOURCES::${JSON.stringify(retrievedSources)}\n\n`));
       } catch {
-        // hvis serialisering feiler, ignorer og fortsett
+        // ignore
       }
 
       const reader = response!.body!.getReader();
@@ -200,35 +197,21 @@ export async function POST(request: Request) {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data:")) continue;
-            const data = trimmed.replace("data:", "").trim();
-            if (data === "[DONE]") {
-              controller.close();
-              return;
-            }
-            try {
-              const json = JSON.parse(data);
-              const delta: string = json?.choices?.[0]?.delta?.content ?? "";
-              if (delta) {
-                fullAnswer += delta;
-                controller.enqueue(encoder.encode(`data: ${delta}\n\n`));
-              }
-            } catch {
-              // Ignorer parse-feil
-            }
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+
+          for (const part of parts) {
+            if (!part.startsWith("data:")) continue;
+            const chunk = part.replace("data:", "").trim();
+            if (!chunk) continue;
+            fullAnswer += (fullAnswer ? "\n" : "") + chunk;
+            controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
           }
         }
       } catch (err) {
-        const fallback = `data: [Feil] Kunne ikke streame svar: ${
-          err instanceof Error ? err.message : "ukjent"
-        }\n\n`;
-        controller.enqueue(encoder.encode(fallback));
+        console.error("Stream error:", err);
       } finally {
         controller.close();
         logInteraction({
@@ -237,7 +220,7 @@ export async function POST(request: Request) {
           role,
           prompt: message,
           retrievedSources,
-          answer: fullAnswer,
+          answer: fullAnswer || "Ingen svar mottatt fra modell.",
         });
       }
     },
