@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { db } from "@/lib/database";
 import { recordModelMaterials } from "@/lib/material-store";
-import { listIfcFiles, uploadIfcFile, listAllFiles } from "@/lib/storage";
+import { listIfcFiles, uploadIfcFile, listAllFiles, uploadGenericFile } from "@/lib/storage";
 
 interface ModelUploadProps {
   selectedProject: string | null;
@@ -45,6 +45,7 @@ interface ModelFile {
   fileId?: string;
   modelId?: string;
   provider?: string;
+  category?: string;
   fileUrl?: string;
   storageUrl?: string;
   rawFile?: File;
@@ -53,6 +54,7 @@ interface ModelFile {
 export default function ModelUpload({ selectedProject }: ModelUploadProps) {
   const [files, setFiles] = useState<ModelFile[]>([]);
   const [existingFiles, setExistingFiles] = useState<ModelFile[]>([]);
+  const [isUploadingDocs, setIsUploadingDocs] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
@@ -76,6 +78,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
           uploadedAt: item.uploadedAt || new Date().toISOString(),
           uploadedBy: item.uploadedBy || "Lagring",
           provider: item.provider,
+          category: item.category,
           storageUrl: item.publicUrl,
           fileUrl: item.publicUrl,
           fileId: item.fileId,
@@ -310,6 +313,45 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
     setFiles((prev) => prev.filter((file) => file.id !== fileId));
   };
 
+  const handleGenericFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selectedProject) {
+      alert("Velg et prosjekt først");
+      return;
+    }
+    if (!e.target.files) return;
+    const selected = Array.from(e.target.files);
+    setIsUploadingDocs(true);
+    try {
+      for (const f of selected) {
+        const res = await uploadGenericFile(f, selectedProject);
+        if (res?.publicUrl) {
+          const newFile: ModelFile = {
+            id: res.fileId || res.path,
+            name: f.name,
+            size: f.size,
+            type: f.type || "application/octet-stream",
+            status: "completed",
+            progress: 100,
+            projectId: selectedProject,
+            uploadedAt: new Date().toISOString(),
+            uploadedBy: "Du",
+            storageUrl: res.publicUrl,
+            fileUrl: res.publicUrl,
+            fileId: res.fileId,
+            category: res.category || "other",
+          };
+          setExistingFiles((prev) => [...prev, newFile]);
+        }
+      }
+    } catch (err) {
+      console.error("Opplasting feilet", err);
+      alert("Opplasting feilet. Se konsoll for detaljer.");
+    } finally {
+      setIsUploadingDocs(false);
+      e.target.value = "";
+    }
+  };
+
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes";
     const k = 1024;
@@ -350,6 +392,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
         <TabsList>
           <TabsTrigger value="upload">Last opp modeller</TabsTrigger>
           <TabsTrigger value="browse">Se filer</TabsTrigger>
+          <TabsTrigger value="docs">Dokumenter</TabsTrigger>
         </TabsList>
 
         <TabsContent value="upload" className="space-y-6">
@@ -532,6 +575,57 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                     <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                     <h4 className="font-medium mb-2">Ingen modeller lastet opp</h4>
                     <p className="text-slate-500 mb-4">Ingen modeller er lastet opp ennå for dette prosjektet.</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="docs" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Dokumenter</CardTitle>
+              <CardDescription>Last opp og se prosjektfiler (IFC, PDF, DOCX, bilder m.m.)</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <input type="file" multiple onChange={handleGenericFileSelect} />
+                {isUploadingDocs && <span className="text-sm text-slate-500">Laster opp...</span>}
+              </div>
+              <div className="space-y-4">
+                {existingFiles.length === 0 && (
+                  <div className="text-center py-8">
+                    <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                    <h4 className="font-medium mb-2">Ingen filer</h4>
+                    <p className="text-slate-500 mb-4">Last opp dokumenter, tegninger, krav eller IFC-filer.</p>
+                  </div>
+                )}
+                {existingFiles.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {existingFiles
+                      .filter((f) => f.storageUrl)
+                      .map((file) => (
+                        <div key={file.id} className="border rounded-lg p-3 flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <FileText className="w-4 h-4 text-slate-500" />
+                              <span className="font-medium">{file.name}</span>
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {formatFileSize(file.size)} · {file.category || "ukjent"}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Badge variant="secondary">{file.category || "fil"}</Badge>
+                            <Button variant="ghost" size="sm" asChild>
+                              <a href={file.storageUrl} target="_blank" rel="noreferrer">
+                                <Download className="w-4 h-4" />
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                   </div>
                 )}
               </div>
