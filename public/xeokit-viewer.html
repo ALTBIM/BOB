@@ -73,7 +73,7 @@
       <canvas id="viewer-canvas"></canvas>
     </div>
     <script type="module">
-      import { Viewer, IFCFormatHandler } from "https://cdn.jsdelivr.net/npm/xeokit-sdk@1.10.0/dist/xeokit-sdk.es.min.js";
+      import { Viewer, IFCFormatHandler } from "./vendor/xeokit-sdk.es.js";
 
       const params = new URLSearchParams(window.location.search);
       const modelUrl = params.get("url");
