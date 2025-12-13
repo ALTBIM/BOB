@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { db } from "@/lib/database";
 import { recordModelMaterials } from "@/lib/material-store";
-import { uploadIfcFile } from "@/lib/storage";
+import { listIfcFiles, uploadIfcFile } from "@/lib/storage";
 
 interface ModelUploadProps {
   selectedProject: string | null;
@@ -42,6 +42,7 @@ interface ModelFile {
   projectId: string;
   uploadedAt: string;
   uploadedBy: string;
+  fileUrl?: string;
   storageUrl?: string;
   rawFile?: File;
 }
@@ -50,6 +51,60 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
   const [files, setFiles] = useState<ModelFile[]>([]);
   const [existingFiles, setExistingFiles] = useState<ModelFile[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  useEffect(() => {
+    if (!selectedProject) {
+      setExistingFiles([]);
+      return;
+    }
+
+    const loadExisting = async () => {
+      try {
+        const models = await db.getBIMModelsByProject(selectedProject);
+        const modelFiles: ModelFile[] = models.map((m) => ({
+          id: m.id,
+          name: m.filename || m.name,
+          size: m.size || 0,
+          type: "application/octet-stream",
+          status: m.status,
+          progress: m.status === "completed" ? 100 : 0,
+          projectId: m.projectId,
+          uploadedAt: m.uploadedAt || new Date().toISOString(),
+          uploadedBy: m.uploadedBy,
+          objects: m.objects,
+          zones: m.zones,
+          materials: m.materials,
+          storageUrl: m.storageUrl,
+          fileUrl: m.storageUrl
+        }));
+
+        const stored = await listIfcFiles(selectedProject);
+        const storedFiles: ModelFile[] = stored.map((item) => ({
+          id: item.path,
+          name: item.name,
+          size: item.size,
+          type: "application/octet-stream",
+          status: "completed",
+          progress: 100,
+          projectId: selectedProject,
+          uploadedAt: item.uploadedAt || new Date().toISOString(),
+          uploadedBy: "Lagring",
+          storageUrl: item.publicUrl,
+          fileUrl: item.publicUrl
+        }));
+
+        const merged = new Map<string, ModelFile>();
+        [...modelFiles, ...storedFiles].forEach((f) => {
+          merged.set(f.id, f);
+        });
+        setExistingFiles(Array.from(merged.values()));
+      } catch (err) {
+        console.error("Klarte ikke laste eksisterende filer", err);
+      }
+    };
+
+    loadExisting();
+  }, [selectedProject]);
 
   const processFiles = (fileList: File[]) => {
     if (!selectedProject) {
@@ -66,19 +121,23 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
       return;
     }
 
-    const newFiles: ModelFile[] = validFiles.map((file) => ({
-      id: `file-${Date.now()}-${Math.random()}`,
-      name: file.name,
-      size: file.size,
-      type: file.type || "application/octet-stream",
-      status: "uploading",
-      progress: 0,
-      projectId: selectedProject,
-      uploadedAt: new Date().toISOString(),
-      uploadedBy: "Andreas Hansen",
-      storageUrl: URL.createObjectURL(file),
-      rawFile: file
-    }));
+    const newFiles: ModelFile[] = validFiles.map((file) => {
+      const objectUrl = URL.createObjectURL(file);
+      return {
+        id: `file-${Date.now()}-${Math.random()}`,
+        name: file.name,
+        size: file.size,
+        type: file.type || "application/octet-stream",
+        status: "uploading",
+        progress: 0,
+        projectId: selectedProject,
+        uploadedAt: new Date().toISOString(),
+        uploadedBy: "Andreas Hansen",
+        storageUrl: objectUrl,
+        fileUrl: objectUrl,
+        rawFile: file
+      };
+    });
 
     setFiles((prev) => [...prev, ...newFiles]);
 
@@ -146,6 +205,25 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
         const uploaded = await uploadIfcFile(file.rawFile, file.projectId);
         storageUrl = uploaded?.publicUrl || storageUrl;
       }
+      if (!storageUrl) {
+        throw new Error("Fikk ingen lagrings-URL fra opplasting");
+      }
+      if (storageUrl) {
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === file.id ? { ...f, storageUrl, fileUrl: f.fileUrl || storageUrl } : f
+          )
+        );
+        setExistingFiles((prev) => {
+          const exists = prev.find((f) => f.id === file.id);
+          if (!exists) {
+            return [...prev, { ...file, storageUrl, fileUrl: file.fileUrl || storageUrl }];
+          }
+          return prev.map((f) =>
+            f.id === file.id ? { ...f, storageUrl, fileUrl: f.fileUrl || storageUrl } : f
+          );
+        });
+      }
       const created = await db.createBIMModel({
         name: file.name,
         filename: file.name,
@@ -162,6 +240,11 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
       recordModelMaterials(file.projectId, created.id, materials);
     } catch (error) {
       console.error("Kunne ikke lagre modell i database", error);
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.id === file.id ? { ...f, status: "error", error: "Opplasting feilet", progress: 0 } : f
+        )
+      );
     }
   };
 
@@ -341,58 +424,64 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                 {getProjectFiles().map((file) => {
                   const downloadUrl = file.storageUrl || file.fileUrl;
                   return (
-                  <div key={file.id} className="border rounded-lg p-4 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <FileText className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <h4 className="font-medium">{file.name}</h4>
-                          <div className="flex items-center space-x-4 text-sm text-slate-500">
-                            <span>{formatFileSize(file.size)}</span>
-                            <span className="flex items-center">
-                              <User className="w-3 h-3 mr-1" />
-                              {file.uploadedBy}
-                            </span>
-                            <span className="flex items-center">
-                              <Calendar className="w-3 h-3 mr-1" />
-                              {formatDate(file.uploadedAt)}
-                            </span>
+                    <div key={file.id} className="border rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium">{file.name}</h4>
+                            <div className="flex items-center space-x-4 text-sm text-slate-500">
+                              <span>{formatFileSize(file.size)}</span>
+                              <span className="flex items-center">
+                                <User className="w-3 h-3 mr-1" />
+                                {file.uploadedBy}
+                              </span>
+                              <span className="flex items-center">
+                                <Calendar className="w-3 h-3 mr-1" />
+                                {formatDate(file.uploadedAt)}
+                              </span>
+                            </div>
                           </div>
                         </div>
+
+                        <div className="flex items-center space-x-2">
+                          <Badge variant={file.status === "completed" ? "default" : "secondary"}>
+                            {file.status === "completed" ? "Ferdig" : file.status}
+                          </Badge>
+                          <Button variant="ghost" size="sm" asChild disabled={!downloadUrl}>
+                            <a
+                              href={downloadUrl}
+                              download={file.name}
+                              rel="noreferrer"
+                              title={downloadUrl ? "Last ned IFC" : "Ingen fil-URL"}
+                            >
+                              <Download className="w-4 h-4" />
+                            </a>
+                          </Button>
+                        </div>
                       </div>
 
-                      <div className="flex items-center space-x-2">
-                        <Badge variant={file.status === "completed" ? "default" : "secondary"}>
-                          {file.status === "completed" ? "Ferdig" : file.status}
-                        </Badge>
-                        <Button variant="ghost" size="sm" asChild disabled={!downloadUrl}>
-                          <a href={downloadUrl} target="_blank" rel="noreferrer" title={downloadUrl ? "Last ned IFC" : "Ingen fil-URL"}>
-                            <Download className="w-4 h-4" />
-                          </a>
-                        </Button>
-                      </div>
+                      {file.status === "completed" && (
+                        <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-blue-600">{file.objects}</div>
+                            <div className="text-xs text-slate-500">Objekter</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-green-600">{file.zones}</div>
+                            <div className="text-xs text-slate-500">Soner</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-orange-600">{file.materials}</div>
+                            <div className="text-xs text-slate-500">Materialer</div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-
-                    {file.status === "completed" && (
-                      <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-blue-600">{file.objects}</div>
-                          <div className="text-xs text-slate-500">Objekter</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-green-600">{file.zones}</div>
-                          <div className="text-xs text-slate-500">Soner</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-orange-600">{file.materials}</div>
-                          <div className="text-xs text-slate-500">Materialer</div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )})}
+                  );
+                })}
 
                 {getProjectFiles().length === 0 && (
                   <div className="text-center py-8">

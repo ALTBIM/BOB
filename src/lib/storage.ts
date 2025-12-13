@@ -9,26 +9,27 @@ const client =
     ? createClient(PUBLIC_URL, PUBLIC_KEY)
     : null;
 
-// Client-side: try calling our API route (server-side service key). Fallback to anon upload if API not configured.
+// Client-side: prefer server API (uses service credentials or Vercel Blob token). Fall back to anon Supabase if configured.
 export const uploadIfcFile = async (file: File, projectId: string) => {
-  // Prefer server route (uses service key) if running in browser and route is available
   if (typeof window !== "undefined") {
     try {
       const form = new FormData();
       form.append("file", file);
       form.append("projectId", projectId);
-      const res = await fetch("/api/ifc/upload", { method: "POST", body: form });
+      const res = await fetch("/api/ifc/upload", { method: "POST", body: form, cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        return { path: data.path as string, publicUrl: data.publicUrl as string };
+        return { path: data.path as string, publicUrl: data.publicUrl as string, provider: data.provider as string };
       }
+      const err = await res.json().catch(() => ({}));
+      console.warn("API upload feilet", err);
     } catch (err) {
-      console.warn("API upload failed, falling back to anon upload", err);
+      console.warn("API upload feilet", err);
     }
   }
 
   if (!client) {
-    console.warn("Supabase (anon) ikke konfigurert. Hopper over opplasting.");
+    console.warn("Ingen lagring konfigurert (hverken API eller Supabase anon).");
     return null;
   }
 
@@ -43,10 +44,31 @@ export const uploadIfcFile = async (file: File, projectId: string) => {
     return null;
   }
   const { data } = client.storage.from(BUCKET).getPublicUrl(path);
-  return { path, publicUrl: data.publicUrl };
+  return { path, publicUrl: data.publicUrl, provider: "supabase" };
 };
 
 export const listIfcFiles = async (projectId: string) => {
+  // Use server API (handles Supabase service key or Vercel Blob)
+  try {
+    const url = projectId ? `/api/ifc/list?projectId=${encodeURIComponent(projectId)}` : `/api/ifc/list`;
+    const res = await fetch(url, { method: "GET", cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      return (data.files || []).map((item: any) => ({
+        id: item.path,
+        name: item.name,
+        size: item.size || 0,
+        path: item.path,
+        publicUrl: item.publicUrl,
+        uploadedAt: item.uploadedAt,
+        provider: item.provider,
+      }));
+    }
+  } catch (err) {
+    console.warn("Kunne ikke hente filer via API", err);
+  }
+
+  // Fallback: anon Supabase if available
   if (!client) return [];
   const path = projectId ? `${projectId}` : "";
   const { data, error } = await client.storage.from(BUCKET).list(path, {
@@ -65,6 +87,7 @@ export const listIfcFiles = async (projectId: string) => {
         path: fullPath,
         publicUrl: publicData.publicUrl,
         uploadedAt: item.created_at,
+        provider: "supabase",
       };
     });
 };

@@ -158,7 +158,7 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
         </Alert>
       )}
       <p className="text-xs text-slate-500">
-        Viewer prøver {WASM_LOCAL} først (fallback {WASM_CDN}). For produksjon bør wasm hostes lokalt.
+        Viewer prøver {WASM_LOCAL} først (fallback {WASM_CDN}). For produksjon bør wasm hostes lokalt under /public/wasm.
       </p>
       {modelName && <p className="text-xs text-slate-500">Modell: {modelName}</p>}
     </div>
