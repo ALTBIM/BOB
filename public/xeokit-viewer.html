@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="no">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BOB IFC Viewer (xeokit)</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0b1220;
+        color: #e5e7eb;
+        font-family: Arial, sans-serif;
+      }
+      #topbar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 52px;
+        background: rgba(0, 0, 0, 0.65);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        box-sizing: border-box;
+        z-index: 10;
+      }
+      #topbar h1 {
+        font-size: 15px;
+        margin: 0;
+      }
+      #status {
+        font-size: 13px;
+        color: #9ca3af;
+      }
+      #viewer-container {
+        position: absolute;
+        top: 52px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #0b1220;
+      }
+      #viewer-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      #error {
+        position: absolute;
+        top: 60px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(239, 68, 68, 0.15);
+        color: #fecaca;
+        padding: 10px 14px;
+        border-radius: 6px;
+        font-size: 13px;
+        display: none;
+        z-index: 20;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="topbar">
+      <h1>BOB IFC Viewer (xeokit)</h1>
+      <div id="status">Laster...</div>
+    </div>
+    <div id="error"></div>
+    <div id="viewer-container">
+      <canvas id="viewer-canvas"></canvas>
+    </div>
+    <script type="module">
+      import { Viewer, IFCFormatHandler } from "https://cdn.jsdelivr.net/npm/xeokit-sdk@1.10.0/dist/xeokit-sdk.es.min.js";
+
+      const params = new URLSearchParams(window.location.search);
+      const modelUrl = params.get("url");
+      const statusEl = document.getElementById("status");
+      const errorEl = document.getElementById("error");
+
+      if (!modelUrl) {
+        errorEl.style.display = "block";
+        errorEl.textContent = "Mangler IFC-URL (?url=...)";
+        statusEl.textContent = "Ingen URL";
+        throw new Error("Ingen IFC-URL gitt");
+      }
+
+      const viewer = new Viewer({
+        canvasId: "viewer-canvas",
+        transparent: true,
+      });
+
+      viewer.camera.eye = [-15, 12, -15];
+      viewer.camera.look = [0, 0, 0];
+      viewer.camera.up = [0, 1, 0];
+
+      const ifcHandler = new IFCFormatHandler(viewer.scene);
+
+      const load = async () => {
+        statusEl.textContent = "Laster IFC...";
+        try {
+          await ifcHandler.load({
+            src: modelUrl,
+            edges: true,
+          });
+          statusEl.textContent = "Ferdig";
+        } catch (err) {
+          console.error(err);
+          errorEl.style.display = "block";
+          errorEl.textContent = "Kunne ikke laste IFC (" + err + ")";
+          statusEl.textContent = "Feil";
+        }
+      };
+
+      load();
+    </script>
+  </body>
+</html>

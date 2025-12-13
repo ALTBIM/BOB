@@ -455,6 +455,9 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                   .filter((file) => file.storageUrl)
                   .map((file) => {
                     const downloadUrl = file.storageUrl || file.fileUrl;
+                    const viewerUrl = downloadUrl
+                      ? `/xeokit-viewer.html?url=${encodeURIComponent(downloadUrl)}`
+                      : undefined;
                     return (
                       <div key={file.id} className="border rounded-lg p-4 hover:bg-slate-50 transition-colors">
                         <div className="flex items-center justify-between">
@@ -482,6 +485,14 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                             <Badge variant={file.status === "completed" ? "default" : "secondary"}>
                               {file.status === "completed" ? "Ferdig" : file.status}
                             </Badge>
+                            {viewerUrl && (
+                              <Button variant="outline" size="sm" asChild>
+                                <a href={viewerUrl} target="_blank" rel="noreferrer" title="Åpne i xeokit-viewer">
+                                  <Eye className="w-4 h-4 mr-1" />
+                                  Vis
+                                </a>
+                              </Button>
+                            )}
                             <Button variant="ghost" size="sm" asChild disabled={!downloadUrl}>
                               <a
                                 href={downloadUrl}
