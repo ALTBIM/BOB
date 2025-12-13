@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { db } from "@/lib/database";
 import { recordModelMaterials } from "@/lib/material-store";
+import { uploadIfcFile } from "@/lib/storage";
 
 interface ModelUploadProps {
   selectedProject: string | null;
@@ -42,6 +43,7 @@ interface ModelFile {
   uploadedAt: string;
   uploadedBy: string;
   storageUrl?: string;
+  rawFile?: File;
 }
 
 export default function ModelUpload({ selectedProject }: ModelUploadProps) {
@@ -51,7 +53,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
 
   const processFiles = (fileList: File[]) => {
     if (!selectedProject) {
-      alert("Velg et prosjekt fra dropdown-menyen først");
+      alert("Velg et prosjekt fra dropdown-menyen fÃ¸rst");
       return;
     }
 
@@ -74,7 +76,8 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
       projectId: selectedProject,
       uploadedAt: new Date().toISOString(),
       uploadedBy: "Andreas Hansen",
-      storageUrl: URL.createObjectURL(file)
+      storageUrl: URL.createObjectURL(file),
+      rawFile: file
     }));
 
     setFiles((prev) => [...prev, ...newFiles]);
@@ -138,6 +141,11 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
 
   const persistModelToStore = async (file: ModelFile, materials: string[]) => {
     try {
+      let storageUrl = file.storageUrl;
+      if (file.rawFile) {
+        const uploaded = await uploadIfcFile(file.rawFile, file.projectId);
+        storageUrl = uploaded?.publicUrl || storageUrl;
+      }
       const created = await db.createBIMModel({
         name: file.name,
         filename: file.name,
@@ -148,8 +156,8 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
         objects: file.objects,
         zones: file.zones,
         materials: file.materials,
-        storageUrl: file.storageUrl,
-        description: "IFC-fil lastet opp i denne okten"
+        storageUrl,
+        description: "IFC-fil lastet opp i denne økten"
       });
       recordModelMaterials(file.projectId, created.id, materials);
     } catch (error) {
@@ -216,7 +224,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
         <CardContent className="text-center py-12">
           <Building2 className="w-12 h-12 text-slate-400 mx-auto mb-4" />
           <h3 className="font-medium text-slate-900 mb-2">Ingen prosjekt valgt</h3>
-          <p className="text-slate-600">Velg et prosjekt fra dropdown-menyen for å laste opp BIM-modeller</p>
+          <p className="text-slate-600">Velg et prosjekt fra dropdown-menyen for Ã¥ laste opp BIM-modeller</p>
         </CardContent>
       </Card>
     );
@@ -234,7 +242,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
           <Card>
             <CardHeader>
               <CardTitle>Last opp IFC-modeller</CardTitle>
-              <CardDescription>Last opp IFC-filer (IFC2x3, IFC4) for å trekke ut objekter, soner og materialer</CardDescription>
+              <CardDescription>Last opp IFC-filer (IFC2x3, IFC4) for Ã¥ trekke ut objekter, soner og materialer</CardDescription>
             </CardHeader>
             <CardContent>
               <div
@@ -246,8 +254,8 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                 onDrop={handleDrop}
               >
                 <Upload className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-                <h3 className="text-lg font-medium mb-2">Dra IFC-filer hit eller klikk for å velge</h3>
-                <p className="text-slate-500 mb-4">Støtter .ifc og .ifczip filer opp til 500MB</p>
+                <h3 className="text-lg font-medium mb-2">Dra IFC-filer hit eller klikk for Ã¥ velge</h3>
+                <p className="text-slate-500 mb-4">StÃ¸tter .ifc og .ifczip filer opp til 500MB</p>
                 <input type="file" multiple accept=".ifc,.ifczip" onChange={handleFileSelect} className="hidden" id="file-upload" />
                 <Button asChild>
                   <label htmlFor="file-upload" className="cursor-pointer">
@@ -392,7 +400,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                   <div className="text-center py-8">
                     <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                     <h4 className="font-medium mb-2">Ingen modeller lastet opp</h4>
-                    <p className="text-slate-500 mb-4">Ingen modeller er lastet opp ennå for dette prosjektet.</p>
+                    <p className="text-slate-500 mb-4">Ingen modeller er lastet opp ennÃ¥ for dette prosjektet.</p>
                   </div>
                 )}
               </div>
@@ -403,3 +411,4 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
     </div>
   );
 }
+
