@@ -100,29 +100,18 @@
         wasmPath: "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/",
       });
 
-      const probeUrl = async (url) => {
-        try {
-          const res = await fetch(url, { method: "HEAD" });
-          return res.ok;
-        } catch (err) {
-          console.warn("HEAD probe failed", err);
-          return false;
-        }
-      };
-
       const load = async () => {
         statusEl.textContent = "Laster IFC...";
-        const ok = await probeUrl(modelUrl);
-        if (!ok) {
-          errorEl.style.display = "block";
-          errorEl.textContent = "Kunne ikke nå IFC-URLen (HEAD feilet). Sjekk CORS/URL.";
-          statusEl.textContent = "Feil";
-          return;
-        }
         try {
+          const res = await fetch(modelUrl, { method: "GET", cache: "no-store" });
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          const buffer = await res.arrayBuffer();
           await ifcHandler.load({
-            src: modelUrl,
+            data: new Uint8Array(buffer),
             edges: true,
+            clean: true,
           });
           statusEl.textContent = "Ferdig";
         } catch (err) {
