@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,7 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
     try {
       const [{ default: THREE }, { IFCLoader }] = await Promise.all([
         import("three"),
-        import("three/examples/jsm/loaders/IFCLoader"),
+        import("three/examples/jsm/loaders/IFCLoader.js"),
       ]);
 
       const width = containerRef.current.clientWidth || 640;
@@ -69,7 +69,7 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
       const grid = new THREE.GridHelper(20, 20, 0xe2e8f0, 0xe2e8f0);
       scene.add(grid);
 
-      const controlsModule = await import("three/examples/jsm/controls/OrbitControls");
+      const controlsModule = await import("three/examples/jsm/controls/OrbitControls.js");
       const OrbitControls = (controlsModule as any).OrbitControls || controlsModule.default;
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.target.set(0, 1, 0);
