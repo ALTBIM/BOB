@@ -14,6 +14,7 @@ import { getAvailableMaterialsForModel, recordModelMaterials } from "@/lib/mater
 import { parseIfcFile } from "@/lib/ifc-parser";
 import { IfcViewerPanel } from "./IfcViewerPanel";
 import { listIfcFiles } from "@/lib/storage";
+import { ProjectFiles } from "@/components/files/ProjectFiles";
 
 interface ProductionDashboardProps {
   selectedProject: string | null;
@@ -525,10 +526,11 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         </div>
       )}
       <Tabs defaultValue="quantities" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="quantities">Mengdelister</TabsTrigger>
           <TabsTrigger value="drawings">Tegningsproduksjon</TabsTrigger>
           <TabsTrigger value="control">IFC Kontroll</TabsTrigger>
+          <TabsTrigger value="files">Dokumenter</TabsTrigger>
         </TabsList>
 
         <TabsContent value="quantities" className="space-y-6">
@@ -803,6 +805,9 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+        <TabsContent value="files" className="space-y-6">
+          <ProjectFiles selectedProject={selectedProject} />
         </TabsContent>
       </Tabs>
     </div>
