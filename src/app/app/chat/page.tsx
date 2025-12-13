@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { v4 as uuid } from "uuid";
 import { useSession } from "@/lib/session";
 
-// Types
 interface Conversation {
   id: string;
   title: string;
@@ -39,7 +38,6 @@ interface RetrievedSource {
   score: number;
 }
 
-// Helpers
 function nowTime() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
@@ -50,7 +48,7 @@ function loadFromStorage<T>(key: string, fallback: T): T {
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
     return JSON.parse(raw) as T;
-  } catch (err) {
+  } catch {
     return fallback;
   }
 }
@@ -59,15 +57,12 @@ function saveToStorage<T>(key: string, value: T) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(key, JSON.stringify(value));
-  } catch (err) {
+  } catch {
     // ignore
   }
 }
 
-// Defaults
-const defaultConversations: Conversation[] = [
-  { id: "1", title: "Kravkontroll - TEK17", updatedAt: "12:03" },
-];
+const defaultConversations: Conversation[] = [{ id: "1", title: "Kravkontroll - TEK17", updatedAt: "12:03" }];
 
 const defaultMessages: Record<string, ChatMessage[]> = {
   "1": [
@@ -81,7 +76,7 @@ const defaultMessages: Record<string, ChatMessage[]> = {
       id: "m2",
       author: "bob",
       content:
-        "Konklusjon: Jeg lager en sjekkliste for mottakskontroll av vinduer. Grunnlag: prosjektrolle entreprenoer, krav: TEK17 paragraf 13-4, interne krav (QA-04), siste logistikkplan. Anbefalinger: bekreft leverandoer og type foer jeg genererer sjekkliste.",
+        "Konklusjon: Jeg lager en sjekkliste for mottakskontroll av vinduer. Grunnlag: prosjektrolle entreprenør, krav: TEK17 paragraf 13-4, interne krav (QA-04), siste logistikkplan. Anbefalinger: bekreft leverandør og type før jeg genererer sjekkliste.",
       timestamp: "12:04",
     },
   ],
@@ -103,7 +98,6 @@ export default function ChatPage() {
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  // Load persisted state per project
   useEffect(() => {
     const conv = loadFromStorage<Conversation[]>(`bob_conversations_${projectId}`, defaultConversations);
     const msgs = loadFromStorage<Record<string, ChatMessage[]>>(`bob_messages_${projectId}`, defaultMessages);
@@ -114,7 +108,6 @@ export default function ChatPage() {
     setMemoryItems(mem);
   }, [projectId]);
 
-  // Persist when changed
   useEffect(() => {
     saveToStorage(`bob_conversations_${projectId}`, conversations);
   }, [conversations, projectId]);
@@ -152,7 +145,7 @@ export default function ChatPage() {
     }));
 
     setIsSending(true);
-    let botMsgId = uuid();
+    const botMsgId = uuid();
     setMessagesByConversation((prev) => ({
       ...prev,
       [activeConversationId]: [
@@ -180,9 +173,7 @@ export default function ChatPage() {
       if (!response.ok || !response.body || !contentType.includes("text/event-stream")) {
         const errorText = await response.text();
         throw new Error(
-          `Chat API feilet (${response.status}). ${
-            errorText?.length ? `Server sa: ${errorText}` : "Ingen respons fra server."
-          }`
+          `Chat API feilet (${response.status}). ${errorText?.length ? `Server sa: ${errorText}` : "Ingen respons fra server."}`
         );
       }
 
@@ -231,7 +222,7 @@ export default function ChatPage() {
           m.id === botMsgId
             ? {
                 ...m,
-                content: `Kunne ikke hente svar naa. ${err?.message || "Ukjent feil."}`,
+                content: `Kunne ikke hente svar nå. ${err?.message || "Ukjent feil."}`,
                 timestamp: nowTime(),
               }
             : m
@@ -313,7 +304,9 @@ export default function ChatPage() {
                     <span className="text-sm font-medium truncate">{c.title}</span>
                     <span className="text-xs opacity-70">{c.updatedAt}</span>
                   </div>
-                  <p className={`text-xs mt-1 ${active ? "text-primary-foreground/80" : "text-muted-foreground"} `}>Historikk og kilder</p>
+                  <p className={`text-xs mt-1 ${active ? "text-primary-foreground/80" : "text-muted-foreground"} `}>
+                    Historikk og kilder
+                  </p>
                 </button>
                 {conversations.length > 1 && (
                   <button
@@ -378,11 +371,15 @@ export default function ChatPage() {
             <div
               key={m.id}
               className={`max-w-3xl rounded-lg px-4 py-3 border ${
-                m.author === "user" ? "bg-card border-border ml-auto shadow-sm" : "bg-muted/70 border-border text-foreground"
+                m.author === "user"
+                  ? "bg-card border-border ml-auto shadow-sm"
+                  : "bg-muted/70 border-border text-foreground"
               }`}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">{m.author === "user" ? "Du" : "BOB"}</span>
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                  {m.author === "user" ? "Du" : "BOB"}
+                </span>
                 <span className="text-xs text-muted-foreground">{m.timestamp}</span>
               </div>
               <p className="text-sm leading-relaxed whitespace-pre-line">{m.content}</p>
@@ -400,15 +397,17 @@ export default function ChatPage() {
           </div>
           {activeSources.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-            <p className="text-xs text-muted-foreground">
               Ingen kilder mottatt ennå. Legg til dokumenter/IFC eller kontroller prosjekt-ID.
             </p>
+          ) : (
             <div className="space-y-2">
               {activeSources.map((s, idx) => (
                 <div key={s.id} className="rounded border border-border bg-card p-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="text-[10px]">Kilde {idx + 1}</Badge>
+                      <Badge variant="secondary" className="text-[10px]">
+                        Kilde {idx + 1}
+                      </Badge>
                       <span className="text-xs font-semibold text-foreground">{s.title}</span>
                     </div>
                     <span className="text-[10px] text-muted-foreground">{s.discipline}</span>
@@ -418,9 +417,9 @@ export default function ChatPage() {
                   {s.zone && <div className="text-[10px] text-muted-foreground mt-1">Sone: {s.zone}</div>}
                 </div>
               ))}
-          <p className="text-xs text-muted-foreground mt-2">
-            BOB foreslår neste steg og bruker prosjektets kontekst. Kilder vises når dokumenter er koblet på.
-          </p>
+            </div>
+          )}
+        </div>
 
         <footer className="border-t border-border p-4">
           <div className="flex items-center gap-2">
@@ -457,7 +456,11 @@ export default function ChatPage() {
           {memoryItems.map((m) => (
             <div key={m.id} className="border border-border rounded-lg p-2 text-sm flex justify-between gap-2">
               <span className="text-foreground whitespace-pre-line">{m.text}</span>
-              <button className="text-muted-foreground hover:text-red-500" onClick={() => handleDeleteMemory(m.id)} aria-label="Slett kontekst">
+              <button
+                className="text-muted-foreground hover:text-red-500"
+                onClick={() => handleDeleteMemory(m.id)}
+                aria-label="Slett kontekst"
+              >
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
@@ -477,7 +480,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-
-
-
