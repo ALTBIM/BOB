@@ -27,6 +27,16 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
     };
   }, []);
 
+  const resolveWasmPath = async () => {
+    try {
+      const head = await fetch(`${WASM_LOCAL}web-ifc.wasm`, { method: "HEAD" });
+      if (head.ok) return WASM_LOCAL;
+    } catch (err) {
+      console.warn("WASM local probe failed, using CDN", err);
+    }
+    return WASM_CDN;
+  };
+
   const loadViewer = async () => {
     if ((!file && !fileUrl) || !containerRef.current) {
       setError("Ingen IFC-fil-URL tilgjengelig. Last opp på nytt i denne økten så vi har en gyldig lenke.");
@@ -76,12 +86,8 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
       controls.update();
 
       const loader = new IFCLoader();
-      try {
-        loader.ifcManager.setWasmPath(WASM_LOCAL);
-      } catch (err) {
-        console.warn("WASM local path failed, falling back to CDN", err);
-        loader.ifcManager.setWasmPath(WASM_CDN);
-      }
+      const wasmPath = await resolveWasmPath();
+      loader.ifcManager.setWasmPath(wasmPath);
 
       let arrayBuffer: ArrayBuffer;
       if (file) {

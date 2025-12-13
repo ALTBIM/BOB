@@ -181,27 +181,26 @@ do $$
 declare
   tbl text;
 begin
-  foreach tbl in array ['project_members','files','ifc_models','chats','chat_messages','checks','check_findings','tasks','kapplister','meeting_suggestions']
+  foreach tbl in array['project_members','files','ifc_models','chats','chat_messages','checks','check_findings','tasks','kapplister','meeting_suggestions']
   loop
-    execute format('
+    execute format($f$
       create policy %I_select on public.%I for select
       using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid()));
-    ', tbl||'_select', tbl, tbl);
+    $f$, tbl||'_select', tbl, tbl);
 
-    execute format('
+    execute format($f$
       create policy %I_insert on public.%I for insert
       with check (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid()));
-    ', tbl||'_insert', tbl, tbl);
+    $f$, tbl||'_insert', tbl, tbl);
 
-    execute format('
+    execute format($f$
       create policy %I_update on public.%I for update
-      using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid() and pm.role in (''admin'',''project_manager'',''manager'')));
-    ', tbl||'_update', tbl, tbl);
+      using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid() and pm.role in ('admin','project_manager','manager')));
+    $f$, tbl||'_update', tbl, tbl);
 
-    execute format('
+    execute format($f$
       create policy %I_delete on public.%I for delete
-      using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid() and pm.role in (''admin'',''project_manager'')));
-    ', tbl||'_delete', tbl, tbl);
+      using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid() and pm.role in ('admin','project_manager')));
+    $f$, tbl||'_delete', tbl, tbl);
   end loop;
 end$$;
-
