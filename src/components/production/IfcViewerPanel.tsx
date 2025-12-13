@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 
 // Host wasm locally; fall back to CDN if needed
 const WASM_LOCAL = "/wasm/";
-const WASM_CDN = "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/";
+const WASM_LOCAL = typeof window !== "undefined" ? `${window.location.origin}/wasm/` : "/wasm/";`nconst WASM_CDN = "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/";
 
 type Props = {
   file?: File;
@@ -29,7 +29,7 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
 
   const loadViewer = async () => {
     if ((!file && !fileUrl) || !containerRef.current) {
-      setError("Ingen IFC-fil tilgjengelig i minnet. Last opp en fil i denne økten.");
+      setError("Ingen IFC-fil tilgjengelig i minnet. Last opp en fil i denne Ã¸kten.");
       return;
     }
 
@@ -140,7 +140,7 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
         <div>
           <p className="text-sm font-semibold text-slate-800">IFC Viewer (eksperimentell)</p>
           <p className="text-xs text-slate-600">
-            Laster geometri i nettleseren via web-ifc. Filen må være lastet opp i denne økten.
+            Laster geometri i nettleseren via web-ifc. Filen mÃ¥ vÃ¦re lastet opp i denne Ã¸kten.
           </p>
         </div>
         <Button size="sm" onClick={loadViewer} disabled={loading}>
@@ -155,9 +155,10 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
         </Alert>
       )}
       <p className="text-xs text-slate-500">
-        Viewer prøver {WASM_LOCAL} først (fallback {WASM_CDN}). For produksjon bør wasm hostes lokalt.
+        Viewer prÃ¸ver {WASM_LOCAL} fÃ¸rst (fallback {WASM_CDN}). For produksjon bÃ¸r wasm hostes lokalt.
       </p>
       {modelName && <p className="text-xs text-slate-500">Modell: {modelName}</p>}
     </div>
   );
 }
+
