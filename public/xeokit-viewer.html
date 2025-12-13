@@ -96,10 +96,29 @@
       viewer.camera.look = [0, 0, 0];
       viewer.camera.up = [0, 1, 0];
 
-      const ifcHandler = new IFCFormatHandler(viewer.scene);
+      const ifcHandler = new IFCFormatHandler(viewer.scene, {
+        wasmPath: "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/",
+      });
+
+      const probeUrl = async (url) => {
+        try {
+          const res = await fetch(url, { method: "HEAD" });
+          return res.ok;
+        } catch (err) {
+          console.warn("HEAD probe failed", err);
+          return false;
+        }
+      };
 
       const load = async () => {
         statusEl.textContent = "Laster IFC...";
+        const ok = await probeUrl(modelUrl);
+        if (!ok) {
+          errorEl.style.display = "block";
+          errorEl.textContent = "Kunne ikke nå IFC-URLen (HEAD feilet). Sjekk CORS/URL.";
+          statusEl.textContent = "Feil";
+          return;
+        }
         try {
           await ifcHandler.load({
             src: modelUrl,
