@@ -76,7 +76,7 @@ const defaultMessages: Record<string, ChatMessage[]> = {
       id: "m2",
       author: "bob",
       content:
-        "Konklusjon: Jeg lager en sjekkliste for mottakskontroll av vinduer. Grunnlag: prosjektrolle entreprenør, krav: TEK17 paragraf 13-4, interne krav (QA-04), siste logistikkplan. Anbefalinger: bekreft leverandør og type før jeg genererer sjekkliste.",
+        "Konklusjon: Jeg lager en sjekkliste for mottakskontroll av vinduer. Grunnlag: prosjektrolle entrepren\u00f8r, krav: TEK17 paragraf 13-4, interne krav (QA-04), siste logistikkplan. Anbefalinger: bekreft leverand\u00f8r og type f\u00f8r jeg genererer sjekkliste.",
       timestamp: "12:04",
     },
   ],
@@ -220,11 +220,7 @@ export default function ChatPage() {
         ...prev,
         [activeConversationId]: (prev[activeConversationId] || []).map((m) =>
           m.id === botMsgId
-            ? {
-                ...m,
-                content: `Kunne ikke hente svar nå. ${err?.message || "Ukjent feil."}`,
-                timestamp: nowTime(),
-              }
+            ? { ...m, content: `Kunne ikke hente svar n\u00e5. ${err?.message || "Ukjent feil."}`, timestamp: nowTime() }
             : m
         ),
       }));
@@ -270,7 +266,6 @@ export default function ChatPage() {
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr_320px] gap-4 min-h-[80vh]">
-      {/* Sidebar */}
       <aside className="border border-border rounded-xl bg-card p-3 flex flex-col">
         <div className="flex items-center gap-2 px-2 py-1">
           <MessageCircle className="h-5 w-5 text-muted-foreground" />
@@ -283,7 +278,7 @@ export default function ChatPage() {
         <div className="mt-3">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Søk i samtaler..." className="pl-9 text-sm bg-background" />
+            <Input placeholder="S\u00f8k i samtaler..." className="pl-9 text-sm bg-background" />
           </div>
         </div>
 
@@ -327,7 +322,6 @@ export default function ChatPage() {
         </Button>
       </aside>
 
-      {/* Chat */}
       <section className="border border-border rounded-xl bg-card flex flex-col">
         <header className="border-b border-border p-4 flex flex-wrap gap-3 items-center justify-between">
           <div className="flex items-center gap-3">
@@ -357,11 +351,7 @@ export default function ChatPage() {
               >
                 Detaljert
               </Button>
-              <Button
-                size="sm"
-                variant={withSources ? "default" : "outline"}
-                onClick={() => setWithSources((v) => !v)}
-              >
+              <Button size="sm" variant={withSources ? "default" : "outline"} onClick={() => setWithSources((v) => !v)}>
                 {withSources ? "Med kilder" : "Uten kilder"}
               </Button>
             </div>
@@ -378,9 +368,7 @@ export default function ChatPage() {
               <div
                 key={m.id}
                 className={`max-w-3xl rounded-lg px-4 py-3 border ${
-                  m.author === "user"
-                    ? "bg-card border-border ml-auto shadow-sm"
-                    : "bg-muted/70 border-border text-foreground"
+                  m.author === "user" ? "bg-card border-border ml-auto shadow-sm" : "bg-muted/70 border-border text-foreground"
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
@@ -408,7 +396,7 @@ export default function ChatPage() {
             </div>
             {activeSources.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                Ingen kilder mottatt ennå. Legg til dokumenter/IFC eller kontroller prosjekt-ID.
+                Ingen kilder mottatt enn\u00e5. Legg til dokumenter/IFC eller kontroller prosjekt-ID.
               </p>
             ) : (
               <div className="space-y-2">
@@ -454,12 +442,11 @@ export default function ChatPage() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            BOB foreslår neste steg og bruker prosjektets kontekst. Kilder vises når dokumenter er koblet på.
+            BOB foresl\u00e5r neste steg og bruker prosjektets kontekst. Kilder vises n\u00e5r dokumenter er koblet p\u00e5.
           </p>
         </footer>
       </section>
 
-      {/* Memory panel */}
       <aside className="border border-border rounded-xl bg-card p-3 flex flex-col">
         <div className="flex items-center gap-2 mb-2">
           <History className="h-4 w-4 text-muted-foreground" />
@@ -497,10 +484,10 @@ export default function ChatPage() {
         <div className="mt-4 border-t border-border pt-3 space-y-2">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Shield className="h-4 w-4" />
-            <span>Prosjektisolert • Ingen deling mellom prosjekter</span>
+            <span>Prosjektisolert -> Ingen deling mellom prosjekter</span>
           </div>
           <div className="text-[11px] text-muted-foreground">
-            Rolle: {user?.role || "ukjent"} • Bruker: {user?.name || "ukjent"}
+            Rolle: {user?.role || "ukjent"} -> Bruker: {user?.name || "ukjent"}
           </div>
         </div>
       </aside>
