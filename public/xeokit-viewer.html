@@ -73,12 +73,7 @@
       <canvas id="viewer-canvas"></canvas>
     </div>
     <script type="module">
-      import {
-        Viewer,
-        NavCubePlugin,
-        FastNavPlugin,
-        WebIFCLoaderPlugin,
-      } from "https://cdn.jsdelivr.net/npm/@xeokit/xeokit-sdk@2.6.100/dist/xeokit-sdk.es.min.js";
+      import { Viewer, WebIFCLoaderPlugin } from "https://cdn.jsdelivr.net/npm/@xeokit/xeokit-sdk@2.6.100/dist/xeokit-sdk.es.min.js";
 
       const params = new URLSearchParams(window.location.search);
       const modelUrl = params.get("url");
@@ -101,11 +96,6 @@
       viewer.camera.eye = [-15, 12, -15];
       viewer.camera.look = [0, 0, 0];
       viewer.camera.up = [0, 1, 0];
-
-      // Basic plugins for nav
-      new NavCubePlugin(viewer, { canvasId: "viewer-canvas" });
-      new FastNavPlugin(viewer);
-      new CameraZoomMouseWheelPlugin(viewer, { enabled: true });
 
       // IFC loader plugin (Xeokit 2.x)
       const ifcLoader = new WebIFCLoaderPlugin(viewer, {
