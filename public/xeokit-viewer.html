@@ -73,7 +73,14 @@
       <canvas id="viewer-canvas"></canvas>
     </div>
     <script type="module">
-      import { Viewer, IFCFormatHandler } from "./vendor/xeokit-sdk.es.js";
+      import {
+        Viewer,
+        XKTLoaderPlugin,
+        NavCubePlugin,
+        FastNavPlugin,
+        CameraZoomMouseWheelPlugin,
+        IFCDefaultLoaderPlugin,
+      } from "https://cdn.jsdelivr.net/npm/@xeokit/xeokit-sdk@2.6.100/dist/xeokit-sdk.es.min.js";
 
       const params = new URLSearchParams(window.location.search);
       const modelUrl = params.get("url");
@@ -90,28 +97,29 @@
       const viewer = new Viewer({
         canvasId: "viewer-canvas",
         transparent: true,
+        antialias: true,
       });
 
       viewer.camera.eye = [-15, 12, -15];
       viewer.camera.look = [0, 0, 0];
       viewer.camera.up = [0, 1, 0];
 
-      const ifcHandler = new IFCFormatHandler(viewer.scene, {
+      // Basic plugins for nav
+      new NavCubePlugin(viewer, { canvasId: "viewer-canvas" });
+      new FastNavPlugin(viewer);
+      new CameraZoomMouseWheelPlugin(viewer, { enabled: true });
+
+      // IFC loader plugin (Xeokit 2.x)
+      const ifcLoader = new IFCDefaultLoaderPlugin(viewer, {
         wasmPath: "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/",
       });
 
       const load = async () => {
         statusEl.textContent = "Laster IFC...";
         try {
-          const res = await fetch(modelUrl, { method: "GET", cache: "no-store" });
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}`);
-          }
-          const buffer = await res.arrayBuffer();
-          await ifcHandler.load({
-            data: new Uint8Array(buffer),
+          await ifcLoader.load({
+            src: modelUrl,
             edges: true,
-            clean: true,
           });
           statusEl.textContent = "Ferdig";
         } catch (err) {
