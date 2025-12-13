@@ -11,6 +11,8 @@ type IngestBody = {
   zone?: string;
   text: string;
   id?: string;
+  userId?: string;
+  role?: string;
 };
 
 export async function POST(request: Request) {
@@ -24,9 +26,14 @@ export async function POST(request: Request) {
     );
   }
 
+  const trimmedProject = projectId.trim();
+  if (!trimmedProject) {
+    return NextResponse.json({ error: "Ugyldig projectId" }, { status: 400 });
+  }
+
   const doc: SourceDocument = {
     id: body.id || `doc-${Date.now()}`,
-    projectId,
+    projectId: trimmedProject,
     title,
     discipline,
     reference,
@@ -36,7 +43,14 @@ export async function POST(request: Request) {
 
   try {
     await upsertDocument(doc);
-    return NextResponse.json({ ok: true, doc });
+    return NextResponse.json({
+      ok: true,
+      doc,
+      meta: {
+        userId: body.userId || "ukjent",
+        role: body.role || "ukjent",
+      },
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || "Kunne ikke lagre dokument" }, { status: 500 });
   }
