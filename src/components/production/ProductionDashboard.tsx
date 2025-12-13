@@ -62,6 +62,7 @@ interface ModelFile {
 
 export default function ProductionDashboard({ selectedProject }: ProductionDashboardProps) {
   const [selectedModel, setSelectedModel] = useState<string>("");
+  const [quantities, setQuantities] = useState<Record<string, Record<string, number>>>({});
   const [availableModels, setAvailableModels] = useState<BIMModel[]>([]);
   const [availableMaterials, setAvailableMaterials] = useState<string[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
@@ -95,6 +96,33 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       setAvailableMaterials([]);
       setSelectedMaterials([]);
     }
+  }, [selectedProject, selectedModel, existingFiles]);
+
+  // Fetch real IFC quantities when model changes
+  useEffect(() => {
+    const fetchQuantities = async () => {
+      if (!selectedProject || !selectedModel) return;
+      const file = existingFiles.find((f) => f.id === selectedModel);
+      if (!file?.storageUrl) return;
+      try {
+        const res = await fetch("/api/ifc/quantities", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileUrl: file.storageUrl }),
+        });
+        if (!res.ok) {
+          console.warn("Quantities fetch feilet", res.status);
+          return;
+        }
+        const data = await res.json();
+        if (data?.counts) {
+          setQuantities((prev) => ({ ...prev, [selectedModel]: data.counts }));
+        }
+      } catch (err) {
+        console.warn("Quantities fetch feilet", err);
+      }
+    };
+    fetchQuantities();
   }, [selectedProject, selectedModel, existingFiles]);
 
   const loadProjectModels = async () => {
@@ -335,8 +363,17 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       const modelMeta =
         availableModels.find((m) => m.id === selectedModel) ||
         existingFiles.find((f) => f.id === selectedModel);
-      const objects = modelMeta?.objects ?? 0;
-      const hasRealData = Boolean(objects);
+      const q = quantities[selectedModel] || {};
+      const objects =
+        modelMeta?.objects ??
+        (q.IFCWALL ?? 0) +
+          (q.IFCSLAB ?? 0) +
+          (q.IFCBEAM ?? 0) +
+          (q.IFCCOLUMN ?? 0) +
+          (q.IFCDOOR ?? 0) +
+          (q.IFCWINDOW ?? 0) +
+          (q.IFCSPACE ?? 0);
+      const hasRealData = Boolean(objects) || Object.keys(q).length > 0;
       const unit = "stk";
       const items: QuantityItem[] = [];
       let totalQuantity = 0;
