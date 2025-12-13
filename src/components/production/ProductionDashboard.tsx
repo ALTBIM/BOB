@@ -386,23 +386,27 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       const blockW = Math.floor((width - 60) / cols);
       const blockH = Math.floor((height - 140) / rows);
 
+      const rectFill = "hsl(var(--muted))";
+      const rectStroke = "hsl(var(--border))";
+      const titleColor = "hsl(var(--foreground))";
+      const subtitleColor = "hsl(var(--muted-foreground))";
       let rects = "";
       for (let i = 0; i < blocks; i++) {
         const col = i % cols;
         const row = Math.floor(i / cols);
         const x = 30 + col * blockW;
         const y = 80 + row * blockH;
-        rects += `<rect x="${x}" y="${y}" width="${blockW - 10}" height="${blockH - 10}" fill="#e2e8f0" stroke="#0f172a" stroke-width="1.5" rx="6"/>`;
-        rects += `<text x="${x + 12}" y="${y + 20}" font-family="Arial" font-size="12" fill="#0f172a">Sone ${row + 1}-${col + 1}</text>`;
+        rects += `<rect x="${x}" y="${y}" width="${blockW - 10}" height="${blockH - 10}" fill="${rectFill}" stroke="${rectStroke}" stroke-width="1.5" rx="6"/>`;
+        rects += `<text x="${x + 12}" y="${y + 20}" font-family="Arial" font-size="12" fill="${titleColor}">Sone ${row + 1}-${col + 1}</text>`;
       }
 
       const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <style>
-    .title { font-family: Arial; font-size: 18px; font-weight: bold; fill: #0f172a; }
-    .subtitle { font-family: Arial; font-size: 12px; fill: #334155; }
+    .title { font-family: Arial; font-size: 18px; font-weight: bold; fill: ${titleColor}; }
+    .subtitle { font-family: Arial; font-size: 12px; fill: ${subtitleColor}; }
   </style>
-  <rect width="100%" height="100%" fill="#fff"/>
+  <rect width="100%" height="100%" fill="hsl(var(--background))"/>
   <text x="30" y="32" class="title">Arbeidstegning - ${model.name || model.filename}</text>
   <text x="30" y="52" class="subtitle">Objekter: ${model.objects ?? "ukjent"} \u2022 Rom/soner: ${model.zones ?? "ukjent"} \u2022 Materialer: ${model.materials ?? "ukjent"}</text>
   ${rects}
