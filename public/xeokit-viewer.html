@@ -123,12 +123,6 @@
       viewer.camera.look = [0, 0, 0];
       viewer.camera.up = [0, 1, 0];
 
-      // IFC loader plugin (Xeokit 2.x)
-      const ifcLoader = new WebIFCLoaderPlugin(viewer, {
-        wasmPath: "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/",
-        WebIFC,
-      });
-
       const load = async () => {
         statusEl.textContent = "Laster IFC...";
         log("Starter load...");
@@ -137,6 +131,17 @@
         try {
           const headRes = await fetch(modelUrl, { method: "HEAD" });
           log(`HEAD status: ${headRes.status}`);
+
+          const ifcAPI = new WebIFC.IfcAPI();
+          ifcAPI.SetWasmPath("https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/");
+          await ifcAPI.Init();
+          log("IfcAPI initialized");
+
+          const ifcLoader = new WebIFCLoaderPlugin(viewer, {
+            WebIFC,
+            IfcAPI: ifcAPI,
+          });
+
           await ifcLoader.load({ id: "model", src: modelUrl });
           statusEl.textContent = "Ferdig";
           log("IFC lastet ok");
