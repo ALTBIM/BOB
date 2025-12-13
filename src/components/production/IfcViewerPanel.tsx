@@ -39,7 +39,7 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
     try {
       const [{ default: THREE }, { IFCLoader }] = await Promise.all([
         import("three"),
-        import("three/examples/jsm/loaders/IFCLoader.js"),
+        import("three-stdlib/loaders/IFCLoader"),
       ]);
 
       const width = containerRef.current.clientWidth || 640;
