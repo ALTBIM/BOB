@@ -10,6 +10,10 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get("projectId") || "";
 
+  if (!projectId) {
+    return NextResponse.json({ error: "Mangler projectId" }, { status: 400 });
+  }
+
   const supabase = getSupabaseServerClient();
   if (!supabase) {
     return NextResponse.json({ files: [] });
@@ -19,7 +23,7 @@ export async function GET(request: Request) {
 
   try {
     const query = supabase.from("files").select("*").order("uploaded_at", { ascending: false }).limit(200);
-    const { data: dbFiles, error: dbErr } = projectId ? await query.eq("project_id", projectId) : await query;
+    const { data: dbFiles, error: dbErr } = await query.eq("project_id", projectId);
     if (!dbErr && dbFiles) {
       dbFiles.forEach((f: any) => {
         files.push({
