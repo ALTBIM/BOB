@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, Search, Send, Plus, Trash2 } from "lucide-react";
+import { MessageCircle, Search, Send, Plus, Trash2, BookOpen, Shield, History, Info } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -269,7 +269,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr_280px] gap-4 min-h-[80vh]">
+    <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr_320px] gap-4 min-h-[80vh]">
       {/* Sidebar */}
       <aside className="border border-border rounded-xl bg-card p-3 flex flex-col">
         <div className="flex items-center gap-2 px-2 py-1">
@@ -330,95 +330,108 @@ export default function ChatPage() {
       {/* Chat */}
       <section className="border border-border rounded-xl bg-card flex flex-col">
         <header className="border-b border-border p-4 flex flex-wrap gap-3 items-center justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">Prosjekt</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <p className="text-sm text-muted-foreground">Prosjekt</p>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value || "demo-project")}
+                  className="w-48 bg-background"
+                />
+                <Badge variant="secondary">Chatmodus</Badge>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
-              <Input
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value || "demo-project")}
-                className="w-48 bg-background"
-              />
-              <Badge variant="secondary">Chatmodus</Badge>
+              <Button
+                size="sm"
+                variant={styleMode === "kort" ? "default" : "outline"}
+                onClick={() => setStyleMode("kort")}
+              >
+                Kort
+              </Button>
+              <Button
+                size="sm"
+                variant={styleMode === "detaljert" ? "default" : "outline"}
+                onClick={() => setStyleMode("detaljert")}
+              >
+                Detaljert
+              </Button>
+              <Button
+                size="sm"
+                variant={withSources ? "default" : "outline"}
+                onClick={() => setWithSources((v) => !v)}
+              >
+                {withSources ? "Med kilder" : "Uten kilder"}
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant={styleMode === "kort" ? "default" : "outline"}
-              onClick={() => setStyleMode("kort")}
-            >
-              Kort
-            </Button>
-            <Button
-              size="sm"
-              variant={styleMode === "detaljert" ? "default" : "outline"}
-              onClick={() => setStyleMode("detaljert")}
-            >
-              Detaljert
-            </Button>
-            <Button
-              size="sm"
-              variant={withSources ? "default" : "outline"}
-              onClick={() => setWithSources((v) => !v)}
-            >
-              {withSources ? "Med kilder" : "Uten kilder"}
-            </Button>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Info className="h-4 w-4" />
+            <span>BOB svarer med Konklusjon / Basis / Anbefalinger / Forutsetninger</span>
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-4 space-y-3 bg-muted">
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={`max-w-3xl rounded-lg px-4 py-3 border ${
-                m.author === "user"
-                  ? "bg-card border-border ml-auto shadow-sm"
-                  : "bg-muted/70 border-border text-foreground"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {m.author === "user" ? "Du" : "BOB"}
-                </span>
-                <span className="text-xs text-muted-foreground">{m.timestamp}</span>
-              </div>
-              <p className="text-sm leading-relaxed whitespace-pre-line">{m.content}</p>
-            </div>
-          ))}
-          <div ref={bottomRef} />
-        </div>
-
-        <div className="border-t border-border bg-muted px-4 py-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-foreground">Kilder fra prosjektet</p>
-            <Badge variant="outline" className="text-[10px]">
-              {activeSources.length} funnet
-            </Badge>
-          </div>
-          {activeSources.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              Ingen kilder mottatt ennå. Legg til dokumenter/IFC eller kontroller prosjekt-ID.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {activeSources.map((s, idx) => (
-                <div key={s.id} className="rounded border border-border bg-card p-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="text-[10px]">
-                        Kilde {idx + 1}
-                      </Badge>
-                      <span className="text-xs font-semibold text-foreground">{s.title}</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground">{s.discipline}</span>
-                  </div>
-                  <div className="text-[10px] text-muted-foreground mt-1">{s.reference}</div>
-                  <div className="text-xs text-foreground mt-1">{s.snippet}</div>
-                  {s.zone && <div className="text-[10px] text-muted-foreground mt-1">Sone: {s.zone}</div>}
+        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] border-b border-border">
+          <div className="flex-1 overflow-auto p-4 space-y-3 bg-muted">
+            {messages.map((m) => (
+              <div
+                key={m.id}
+                className={`max-w-3xl rounded-lg px-4 py-3 border ${
+                  m.author === "user"
+                    ? "bg-card border-border ml-auto shadow-sm"
+                    : "bg-muted/70 border-border text-foreground"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {m.author === "user" ? "Du" : "BOB"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{m.timestamp}</span>
                 </div>
-              ))}
+                <p className="text-sm leading-relaxed whitespace-pre-line">{m.content}</p>
+              </div>
+            ))}
+            <div ref={bottomRef} />
+          </div>
+
+          <div className="border-l border-border bg-card/80 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-semibold">Kilder</p>
+                <p className="text-xs text-muted-foreground">Prosjektisolert</p>
+              </div>
+              <Badge variant="outline" className="ml-auto text-[10px]">
+                {activeSources.length} funnet
+              </Badge>
             </div>
-          )}
+            {activeSources.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Ingen kilder mottatt ennå. Legg til dokumenter/IFC eller kontroller prosjekt-ID.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {activeSources.map((s, idx) => (
+                  <div key={s.id} className="rounded border border-border bg-card/90 p-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-[10px]">
+                          Kilde {idx + 1}
+                        </Badge>
+                        <span className="text-xs font-semibold text-foreground">{s.title}</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">{s.discipline}</span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-1">{s.reference}</div>
+                    <div className="text-xs text-foreground mt-1">{s.snippet}</div>
+                    {s.zone && <div className="text-[10px] text-muted-foreground mt-1">Sone: {s.zone}</div>}
+                    <div className="text-[10px] text-muted-foreground mt-1">Score: {s.score.toFixed(2)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <footer className="border-t border-border p-4">
@@ -448,10 +461,15 @@ export default function ChatPage() {
 
       {/* Memory panel */}
       <aside className="border border-border rounded-xl bg-card p-3 flex flex-col">
-        <p className="text-sm font-semibold text-foreground mb-2">BOB husker (prosjekt)</p>
+        <div className="flex items-center gap-2 mb-2">
+          <History className="h-4 w-4 text-muted-foreground" />
+          <p className="text-sm font-semibold text-foreground">BOB husker (prosjekt)</p>
+        </div>
         <div className="space-y-2 overflow-auto flex-1">
           {memoryItems.length === 0 && (
-            <p className="text-xs text-muted-foreground">Ingen kontekst enda. Legg til viktige fakta, krav eller antakelser.</p>
+            <p className="text-xs text-muted-foreground">
+              Ingen kontekst enda. Legg til viktige fakta, krav eller antakelser.
+            </p>
           )}
           {memoryItems.map((m) => (
             <div key={m.id} className="border border-border rounded-lg p-2 text-sm flex justify-between gap-2">
@@ -475,6 +493,15 @@ export default function ChatPage() {
           <Button className="w-full" variant="outline" onClick={handleAddMemory} disabled={!newMemoryText.trim()}>
             Lagre kontekst
           </Button>
+        </div>
+        <div className="mt-4 border-t border-border pt-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Shield className="h-4 w-4" />
+            <span>Prosjektisolert • Ingen deling mellom prosjekter</span>
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            Rolle: {user?.role || "ukjent"} • Bruker: {user?.name || "ukjent"}
+          </div>
         </div>
       </aside>
     </div>
