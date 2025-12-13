@@ -824,4 +824,3 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     </div>
   );
 }
-

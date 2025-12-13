@@ -338,7 +338,9 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {getProjectFiles().map((file) => (
+                {getProjectFiles().map((file) => {
+                  const downloadUrl = file.storageUrl || file.fileUrl;
+                  return (
                   <div key={file.id} className="border rounded-lg p-4 hover:bg-slate-50 transition-colors">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
@@ -365,14 +367,10 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                         <Badge variant={file.status === "completed" ? "default" : "secondary"}>
                           {file.status === "completed" ? "Ferdig" : file.status}
                         </Badge>
-                        <Button variant="ghost" size="sm">
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" disabled title="Nedlasting av IFC kommer senere">
-                          <Download className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Trash2 className="w-4 h-4" />
+                        <Button variant="ghost" size="sm" asChild disabled={!downloadUrl}>
+                          <a href={downloadUrl} target="_blank" rel="noreferrer" title={downloadUrl ? "Last ned IFC" : "Ingen fil-URL"}>
+                            <Download className="w-4 h-4" />
+                          </a>
                         </Button>
                       </div>
                     </div>
@@ -394,7 +392,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                       </div>
                     )}
                   </div>
-                ))}
+                )})}
 
                 {getProjectFiles().length === 0 && (
                   <div className="text-center py-8">
@@ -411,4 +409,3 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
     </div>
   );
 }
-
