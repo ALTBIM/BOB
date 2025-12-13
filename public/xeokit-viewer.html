@@ -31,7 +31,7 @@
         font-size: 15px;
         margin: 0;
       }
-      #status {
+      #status, #url {
         font-size: 13px;
         color: #9ca3af;
       }
@@ -42,6 +42,20 @@
         right: 0;
         bottom: 0;
         background: #0b1220;
+      }
+      #log {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+        right: 8px;
+        max-height: 150px;
+        overflow: auto;
+        background: rgba(15, 23, 42, 0.7);
+        color: #cbd5e1;
+        font-size: 12px;
+        padding: 8px;
+        border-radius: 6px;
+        border: 1px solid rgba(148, 163, 184, 0.3);
       }
       #viewer-canvas {
         width: 100%;
@@ -68,10 +82,12 @@
       <h1>BOB IFC Viewer (xeokit)</h1>
       <div id="status">Laster...</div>
     </div>
+    <div id="url" style="position:absolute; top:56px; left:8px; right:8px; font-size:12px; color:#94a3b8;"></div>
     <div id="error"></div>
     <div id="viewer-container">
       <canvas id="viewer-canvas"></canvas>
     </div>
+    <div id="log"></div>
     <script type="module">
       import { Viewer, WebIFCLoaderPlugin } from "https://cdn.jsdelivr.net/npm/@xeokit/xeokit-sdk@2.6.100/dist/xeokit-sdk.es.min.js";
       import * as WebIFC from "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/web-ifc-api.js";
@@ -80,6 +96,14 @@
       const modelUrl = params.get("url");
       const statusEl = document.getElementById("status");
       const errorEl = document.getElementById("error");
+      const urlEl = document.getElementById("url");
+      const logEl = document.getElementById("log");
+
+      const log = (msg) => {
+        console.log(msg);
+        logEl.textContent += `${new Date().toISOString()} ${msg}\n`;
+        logEl.scrollTop = logEl.scrollHeight;
+      };
 
       if (!modelUrl) {
         errorEl.style.display = "block";
@@ -87,6 +111,7 @@
         statusEl.textContent = "Ingen URL";
         throw new Error("Ingen IFC-URL gitt");
       }
+      urlEl.textContent = `URL: ${modelUrl}`;
 
       const viewer = new Viewer({
         canvasId: "viewer-canvas",
@@ -106,14 +131,21 @@
 
       const load = async () => {
         statusEl.textContent = "Laster IFC...";
+        log("Starter load...");
+        log("WASM path: https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/");
+        log("IFC URL: " + modelUrl);
         try {
+          const headRes = await fetch(modelUrl, { method: "HEAD" });
+          log(`HEAD status: ${headRes.status}`);
           await ifcLoader.load({ id: "model", src: modelUrl });
           statusEl.textContent = "Ferdig";
+          log("IFC lastet ok");
         } catch (err) {
           console.error(err);
           errorEl.style.display = "block";
           errorEl.textContent = "Kunne ikke laste IFC (" + err + ")";
           statusEl.textContent = "Feil";
+          log("Feil: " + err);
         }
       };
 
