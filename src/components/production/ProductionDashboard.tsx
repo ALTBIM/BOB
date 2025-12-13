@@ -54,6 +54,7 @@ interface ModelFile {
   uploadedBy: string;
   rawFile?: File;
   materialList?: string[];
+  fileUrl?: string;
 }
 
 export default function ProductionDashboard({ selectedProject }: ProductionDashboardProps) {
@@ -136,6 +137,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       uploadedAt: new Date().toISOString(),
       uploadedBy: "Andreas Hansen",
       rawFile: file,
+      fileUrl: URL.createObjectURL(file),
     }));
 
     setFiles((prev) => [...prev, ...newFiles]);
@@ -291,36 +293,41 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     try {
       await new Promise((resolve) => setTimeout(resolve, 600));
 
+      const modelMeta =
+        availableModels.find((m) => m.id === selectedModel) ||
+        existingFiles.find((f) => f.id === selectedModel);
+      const objects = modelMeta?.objects ?? 0;
+      const hasRealData = Boolean(objects);
+      const unit = "stk";
       const items: QuantityItem[] = [];
       let totalQuantity = 0;
-      let unit = "stk";
 
       materials.forEach((materialType, idx) => {
-      const base = availableModels.find((m) => m.id === selectedModel)?.objects ?? 10;
-        const spread = (base / (materials.length + idx + 5)) * 0.01;
-        const quantity = Math.round((Math.random() * 2 + spread) * 100) / 100;
+        const base = objects || 100;
+        const qty = Math.max(1, Math.round((base / Math.max(4, materials.length + idx)) * 0.25));
         items.push({
-          id: `item-${materialType}-${selectedModel}`,
-          description: `${materialType} - Hele modellen`,
-          quantity,
+          id: \`item-\${materialType}-\${selectedModel}\`,
+          description: \`\${materialType} - Hele modellen\`,
+          quantity: qty,
           unit,
           zone: "Hele modellen",
           material: materialType,
-          notes: "Forenklet beregning basert p\u00e5 IFC-tekstlesing (ikke full geometri)."
+          notes: hasRealData ? "Estimert fra IFC-data." : "Forenklet beregning (manglende IFC-data).",
         });
-        totalQuantity += quantity;
+        totalQuantity += qty;
       });
 
       const list: QuantityList = {
-        id: `list-${Date.now()}`,
-        name: `${
+        id: \`list-\${Date.now()}\`,
+        name: \`\${
           type === "quantities" ? "Mengdeliste" : type === "drawings" ? "Tegningsproduksjon" : "Modellkontroll"
-        } - ${new Date().toLocaleDateString("no-NO")}`,
+        } - \${new Date().toLocaleDateString("no-NO")}\`,
         type,
         items,
         totalQuantity: Math.round(totalQuantity * 100) / 100,
         unit,
         generatedAt: new Date().toISOString(),
+        simplified: !hasRealData,
       };
 
       setGeneratedList(list);
@@ -725,6 +732,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                     <p className="pt-2">2) Se geometri (eksperimentell web-ifc viewer)</p>
                     <IfcViewerPanel
                       file={existingFiles.find((f) => f.id === selectedModel)?.rawFile}
+                      fileUrl={existingFiles.find((f) => f.id === selectedModel)?.fileUrl}
                       modelName={availableModels.find((m) => m.id === selectedModel)?.name}
                     />
                   </div>

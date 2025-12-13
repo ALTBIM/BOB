@@ -23,7 +23,11 @@ export function DocumentIngestPanel({ projectId }: Props) {
 
   const handleFile = async (file: File) => {
     // Kun tekstfiler inntil vi har PDF-parsing
-    if (!file.type.includes("text") && !file.name.toLowerCase().endsWith(".txt")) {
+    if (file.name.toLowerCase().endsWith(".pdf")) {
+      setBanner({ type: "info", text: "PDF-parsing kommer senere. Last opp tekstfil enn så lenge." });
+      return;
+    }
+    if (!file.type.includes("text") && !file.name.toLowerCase().endsWith(".txt") && !file.name.toLowerCase().endsWith(".md") && !file.name.toLowerCase().endsWith(".csv")) {
       setBanner({ type: "error", text: "Bare tekstfiler støttes her nå. PDF-parsing kommer senere." });
       return;
     }
@@ -83,7 +87,7 @@ export function DocumentIngestPanel({ projectId }: Props) {
         <div className="flex flex-col gap-2">
           <Input
             type="file"
-            accept=".txt,.md,.csv"
+            accept=".txt,.md,.csv,.pdf"
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) handleFile(f);

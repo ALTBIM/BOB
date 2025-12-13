@@ -9,10 +9,11 @@ const WASM_CDN = "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/";
 
 type Props = {
   file?: File;
+  fileUrl?: string;
   modelName?: string;
 };
 
-export function IfcViewerPanel({ file, modelName }: Props) {
+export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const [loading, setLoading] = useState(false);
@@ -25,8 +26,8 @@ export function IfcViewerPanel({ file, modelName }: Props) {
   }, []);
 
   const loadViewer = async () => {
-    if (!file || !containerRef.current) {
-      setError("Ingen IFC-fil tilgjengelig i minnet. Last opp en fil i denne Ã¸kten.");
+    if ((!file && !fileUrl) || !containerRef.current) {
+      setError("Ingen IFC-fil tilgjengelig i minnet. Last opp en fil i denne \u00f8kten.");
       return;
     }
 
@@ -75,7 +76,14 @@ export function IfcViewerPanel({ file, modelName }: Props) {
       const loader = new IFCLoader();
       loader.ifcManager.setWasmPath(WASM_CDN);
 
-      const buffer = new Uint8Array(await file.arrayBuffer());
+      let arrayBuffer: ArrayBuffer;
+      if (file) {
+        arrayBuffer = await file.arrayBuffer();
+      } else {
+        const res = await fetch(fileUrl!);
+        arrayBuffer = await res.arrayBuffer();
+      }
+      const buffer = new Uint8Array(arrayBuffer);
       await new Promise<void>((resolve, reject) => {
         loader.parse(buffer.buffer, "", (model: any) => {
           scene.add(model);
@@ -146,5 +154,3 @@ export function IfcViewerPanel({ file, modelName }: Props) {
     </div>
   );
 }
-
-
