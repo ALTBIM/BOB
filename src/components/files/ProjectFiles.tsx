@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, FileText, Image, FileType, FilePlus, Folder, Download } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Upload, FileText, Image, FileType, FilePlus, Folder, Download, Eye } from "lucide-react";
 import { listAllFiles, uploadGenericFile } from "@/lib/storage";
 
 interface ProjectFilesProps {
@@ -51,6 +52,7 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [activeCategory, setActiveCategory] = useState<Category | "all">("all");
+  const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -134,29 +136,39 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
           </TabsList>
 
           <TabsContent value="all" className="space-y-3">
-            <FileGrid files={filtered} />
+            <FileGrid files={filtered} onPreview={setPreviewFile} />
           </TabsContent>
           <TabsContent value="ifc" className="space-y-3">
-            <FileGrid files={filtered} />
+            <FileGrid files={filtered} onPreview={setPreviewFile} />
           </TabsContent>
           <TabsContent value="pdf" className="space-y-3">
-            <FileGrid files={filtered} />
+            <FileGrid files={filtered} onPreview={setPreviewFile} />
           </TabsContent>
           <TabsContent value="document" className="space-y-3">
-            <FileGrid files={filtered} />
+            <FileGrid files={filtered} onPreview={setPreviewFile} />
           </TabsContent>
           <TabsContent value="image" className="space-y-3">
-            <FileGrid files={filtered} />
+            <FileGrid files={filtered} onPreview={setPreviewFile} />
           </TabsContent>
         </Tabs>
 
         {filtered.length === 0 && <p className="text-sm text-slate-500">Ingen filer funnet for valgt kategori.</p>}
       </CardContent>
+
+      <Dialog open={!!previewFile} onOpenChange={(open) => !open && setPreviewFile(null)}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>{previewFile?.name}</DialogTitle>
+            <p className="text-sm text-slate-500 break-all">{previewFile?.publicUrl}</p>
+          </DialogHeader>
+          {previewFile ? <PreviewBody file={previewFile} /> : null}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
 
-function FileGrid({ files }: { files: FileItem[] }) {
+function FileGrid({ files, onPreview }: { files: FileItem[]; onPreview: (f: FileItem) => void }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {files.map((file) => (
@@ -170,6 +182,10 @@ function FileGrid({ files }: { files: FileItem[] }) {
           </div>
           <div className="flex items-center space-x-2">
             <Badge variant="secondary">{categoryLabels[(file.category as Category) || "unknown"]}</Badge>
+            <Button variant="outline" size="sm" onClick={() => onPreview(file)}>
+              <Eye className="w-4 h-4 mr-1" />
+              Åpne
+            </Button>
             <Button variant="ghost" size="sm" asChild>
               <a href={file.publicUrl} target="_blank" rel="noreferrer">
                 <Download className="w-4 h-4" />
@@ -190,3 +206,50 @@ function formatBytes(bytes: number) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
+function PreviewBody({ file }: { file: FileItem }) {
+  const category = (file.category as Category) || "unknown";
+  const iframeUrl =
+    category === "ifc"
+      ? `/xeokit-viewer.html?url=${encodeURIComponent(file.publicUrl)}`
+      : file.publicUrl;
+
+  if (category === "image") {
+    return <img src={file.publicUrl} alt={file.name} className="max-h-[70vh] w-full object-contain rounded" />;
+  }
+  if (category === "pdf") {
+    return (
+      <iframe
+        src={file.publicUrl}
+        title={file.name}
+        className="w-full"
+        style={{ minHeight: "70vh" }}
+      />
+    );
+  }
+  if (category === "ifc") {
+    return (
+      <iframe
+        src={iframeUrl}
+        title={file.name}
+        className="w-full"
+        style={{ minHeight: "70vh" }}
+      />
+    );
+  }
+  if (category === "document" || category === "spreadsheet" || category === "other") {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-slate-600">
+          Forhåndsvisning støttes ikke for denne filtypen. Bruk nedlastingsknappen for å åpne lokalt.
+        </p>
+        <Button asChild>
+          <a href={file.publicUrl} target="_blank" rel="noreferrer">
+            <Download className="w-4 h-4 mr-1" />
+            Last ned
+          </a>
+        </Button>
+      </div>
+    );
+  }
+  return null;
+}
