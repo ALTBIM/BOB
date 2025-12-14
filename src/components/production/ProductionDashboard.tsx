@@ -60,9 +60,15 @@ interface ModelFile {
   storageUrl?: string;
 }
 
+type Quantities = {
+  counts: Record<string, number>;
+  areas: Record<string, number>;
+  volumes: Record<string, number>;
+};
+
 export default function ProductionDashboard({ selectedProject }: ProductionDashboardProps) {
   const [selectedModel, setSelectedModel] = useState<string>("");
-  const [quantities, setQuantities] = useState<Record<string, Record<string, number>>>({});
+  const [quantities, setQuantities] = useState<Record<string, Quantities>>({});
   const [availableModels, setAvailableModels] = useState<BIMModel[]>([]);
   const [availableMaterials, setAvailableMaterials] = useState<string[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
@@ -116,7 +122,14 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         }
         const data = await res.json();
         if (data?.counts) {
-          setQuantities((prev) => ({ ...prev, [selectedModel]: data.counts }));
+          setQuantities((prev) => ({
+            ...prev,
+            [selectedModel]: {
+              counts: data.counts || {},
+              areas: data.areas || {},
+              volumes: data.volumes || {},
+            },
+          }));
         }
       } catch (err) {
         console.warn("Quantities fetch feilet", err);
@@ -336,6 +349,11 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     });
   };
 
+  const formatQuantityNumber = (value?: number) => {
+    if (!value || Number.isNaN(value)) return "0";
+    return Number(value).toLocaleString("no-NO", { maximumFractionDigits: 2 });
+  };
+
   const getProjectFiles = () => {
     return existingFiles.filter((file) => (selectedProject ? file.projectId === selectedProject : true));
   };
@@ -363,7 +381,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       const modelMeta =
         availableModels.find((m) => m.id === selectedModel) ||
         existingFiles.find((f) => f.id === selectedModel);
-      const q = quantities[selectedModel] || {};
+      const q = quantities[selectedModel]?.counts || {};
       const objects =
         modelMeta?.objects ??
         (q.IFCWALL ?? 0) +
@@ -667,6 +685,55 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                     </CardContent>
                   </Card>
                 </div>
+              )}
+
+              {selectedModel && quantities[selectedModel] && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">IFC-mengder (fra BaseQuantities)</CardTitle>
+                    <CardDescription>Antall, areal og volum der IFC-en har IfcElementQuantity.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left p-2">Type</th>
+                          <th className="text-left p-2">Antall</th>
+                          <th className="text-left p-2">Areal (m²)</th>
+                          <th className="text-left p-2">Volum (m³)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          "IFCWALLSTANDARDCASE",
+                          "IFCWALL",
+                          "IFCSLAB",
+                          "IFCROOF",
+                          "IFCBEAM",
+                          "IFCCOLUMN",
+                          "IFCCOVERING",
+                          "IFCRAILING",
+                          "IFCSPACE",
+                          "IFCDOOR",
+                          "IFCWINDOW",
+                        ].map(
+                          (typeKey) => (
+                            <tr key={typeKey} className="border-b hover:bg-muted/40">
+                              <td className="p-2">{typeKey}</td>
+                              <td className="p-2 font-mono">{quantities[selectedModel]?.counts?.[typeKey] ?? 0}</td>
+                              <td className="p-2 font-mono">
+                                {formatQuantityNumber(quantities[selectedModel]?.areas?.[typeKey])}
+                              </td>
+                              <td className="p-2 font-mono">
+                                {formatQuantityNumber(quantities[selectedModel]?.volumes?.[typeKey])}
+                              </td>
+                            </tr>
+                          )
+                        )}
+                      </tbody>
+                    </table>
+                  </CardContent>
+                </Card>
               )}
 
               {selectedModel && (

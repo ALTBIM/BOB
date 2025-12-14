@@ -151,6 +151,35 @@ create table if not exists public.meeting_suggestions (
 );
 create index if not exists meeting_suggestions_project_idx on public.meeting_suggestions(project_id);
 
+-- Extracted file text (for chat/krav)
+create table if not exists public.file_texts (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  file_id uuid not null references public.files(id) on delete cascade,
+  content text,
+  content_type text,
+  source_path text,
+  word_count int,
+  page_count int,
+  created_at timestamptz not null default now()
+);
+create index if not exists file_texts_project_idx on public.file_texts(project_id);
+create index if not exists file_texts_file_idx on public.file_texts(file_id);
+
+-- Parsed requirements (lightweight extraction from text docs)
+create table if not exists public.file_requirements (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  file_id uuid references public.files(id) on delete set null,
+  text text not null,
+  source_path text,
+  source_page int,
+  created_at timestamptz not null default now()
+);
+create index if not exists file_requirements_project_idx on public.file_requirements(project_id);
+create index if not exists file_requirements_file_idx on public.file_requirements(file_id);
+create unique index if not exists file_requirements_unique on public.file_requirements(file_id, text);
+
 -- RLS
 alter table public.projects enable row level security;
 alter table public.project_members enable row level security;
@@ -163,6 +192,8 @@ alter table public.check_findings enable row level security;
 alter table public.tasks enable row level security;
 alter table public.kapplister enable row level security;
 alter table public.meeting_suggestions enable row level security;
+alter table public.file_texts enable row level security;
+alter table public.file_requirements enable row level security;
 
 -- Policy helper: project membership
 create or replace view public.user_project_memberships as
@@ -181,7 +212,7 @@ do $$
 declare
   tbl text;
 begin
-  foreach tbl in array['project_members','files','ifc_models','chats','chat_messages','checks','check_findings','tasks','kapplister','meeting_suggestions']
+  foreach tbl in array['project_members','files','ifc_models','chats','chat_messages','checks','check_findings','tasks','kapplister','meeting_suggestions','file_texts','file_requirements']
   loop
     execute format($f$
       create policy %I_select on public.%I for select

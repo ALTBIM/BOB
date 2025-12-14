@@ -36,6 +36,7 @@ export async function GET(request: Request) {
           projectId: f.project_id,
           category: f.metadata?.category || "other",
           type: f.type,
+          hasText: Boolean(f.metadata?.hasText),
         });
       });
     }

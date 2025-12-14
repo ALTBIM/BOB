@@ -117,6 +117,7 @@ export const uploadGenericFile = async (file: File, projectId: string, descripti
           provider: data.provider as string,
           fileId: data.fileId as string | undefined,
           category: data.category as string | undefined,
+          hasText: data.hasText as boolean | undefined,
         };
       }
       const err = await res.json().catch(() => ({}));
@@ -165,6 +166,7 @@ export const listAllFiles = async (projectId: string) => {
         category: item.category,
         projectId: item.projectId,
         uploadedBy: item.uploadedBy,
+        hasText: item.hasText,
       }));
     }
   } catch (err) {

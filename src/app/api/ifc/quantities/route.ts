@@ -13,10 +13,14 @@ const TYPES = [
   "IFCBUILDING",
   "IFCBUILDINGSTOREY",
   "IFCSPACE",
+  "IFCWALLSTANDARDCASE",
   "IFCWALL",
   "IFCSLAB",
+  "IFCROOF",
   "IFCBEAM",
   "IFCCOLUMN",
+  "IFCCOVERING",
+  "IFCRAILING",
   "IFCDOOR",
   "IFCWINDOW",
   "IFCFURNISHINGELEMENT",
@@ -66,11 +70,76 @@ export async function POST(request: Request) {
       }
     }
 
+    // Map element expressID -> type name for quick lookup
+    const elementTypeById = new Map<number, string>();
+    const areas: Record<string, number> = {};
+    const volumes: Record<string, number> = {};
+    TYPES.forEach((t) => {
+      areas[t] = 0;
+      volumes[t] = 0;
+    });
+
+    for (const t of TYPES) {
+      const code = typeCodes[t];
+      if (!code) continue;
+      const ids = api.GetLineIDsWithType(modelID, code);
+      if (ids) {
+        for (let i = 0; i < ids.size(); i++) {
+          const id = ids.get(i);
+          elementTypeById.set(id, t);
+        }
+      }
+    }
+
+    const numVal = (v: any) => {
+      if (v === undefined || v === null) return null;
+      if (typeof v === "number") return v;
+      if (typeof v === "object" && "value" in v) return Number((v as any).value);
+      return Number(v) || null;
+    };
+
+    const relCode = typeCodes["IFCRELDEFINESBYPROPERTIES"];
+    if (relCode) {
+      const relIds = api.GetLineIDsWithType(modelID, relCode);
+      if (relIds) {
+        for (let i = 0; i < relIds.size(); i++) {
+          const relId = relIds.get(i);
+          const rel = api.GetLine(modelID, relId);
+          const propDefId = (rel as any)?.RelatingPropertyDefinition?.value ?? (rel as any)?.RelatingPropertyDefinition;
+          if (!propDefId) continue;
+          const propDef = api.GetLine(modelID, propDefId);
+          if (!propDef || (propDef as any)?.type !== typeCodes["IFCELEMENTQUANTITY"]) continue;
+
+          const quantities = (propDef as any)?.Quantities || [];
+          const quantityIds = Array.isArray(quantities)
+            ? quantities.map((q: any) => q?.value ?? q).filter(Boolean)
+            : [];
+
+          const related = (rel as any)?.RelatedObjects || [];
+          for (const objRef of related) {
+            const objId = objRef?.value ?? objRef;
+            const typeName = elementTypeById.get(objId);
+            if (!typeName) continue;
+            for (const qId of quantityIds) {
+              const qLine = api.GetLine(modelID, qId);
+              if (!qLine) continue;
+              const areaVal = numVal((qLine as any).AreaValue);
+              const volVal = numVal((qLine as any).VolumeValue);
+              if (areaVal) areas[typeName] = (areas[typeName] || 0) + areaVal;
+              if (volVal) volumes[typeName] = (volumes[typeName] || 0) + volVal;
+            }
+          }
+        }
+      }
+    }
+
     api.CloseModel(modelID);
 
     return NextResponse.json({
       ok: true,
       counts,
+      areas,
+      volumes,
     });
   } catch (err: any) {
     console.error("Quantities error", err);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -169,6 +170,12 @@ export default function HomePage() {
               </div>
 
               <div className="hidden sm:flex gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/app/documents">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Dokumenter
+                  </Link>
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => setActiveTab("users")}>
                   <Users className="w-4 h-4 mr-2" />
                   Users
