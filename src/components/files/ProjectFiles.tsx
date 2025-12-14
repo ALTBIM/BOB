@@ -274,7 +274,7 @@ function PreviewBody({
   const category = (file.category as Category) || "unknown";
   const iframeUrl =
     category === "ifc"
-      ? `/xeokit-viewer.html?url=${encodeURIComponent(file.publicUrl)}`
+      ? `https://viewer.altbim.no/?url=${encodeURIComponent(file.publicUrl)}`
       : file.publicUrl;
 
   useEffect(() => {
@@ -359,3 +359,4 @@ function PreviewBody({
   }
   return null;
 }
+
