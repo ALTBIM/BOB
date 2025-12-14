@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -18,6 +18,7 @@ import {
   Search,
   Settings,
   Users,
+  Eye,
 } from "lucide-react";
 import LoginForm from "@/components/auth/LoginForm";
 import ProjectCreationModal from "@/components/projects/ProjectCreationModal";
@@ -30,6 +31,7 @@ import { User, Project, db, getRoleDisplayName } from "@/lib/database";
 import { useSession } from "@/lib/session";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { DocumentIngestPanel } from "@/components/rag/DocumentIngestPanel";
+import { listIfcFiles } from "@/lib/storage";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +47,8 @@ export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeTab, setActiveTab] = useState("projects");
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [ifcFiles, setIfcFiles] = useState<{ id: string; name: string; url: string }[]>([]);
+  const [selectedIfcUrl, setSelectedIfcUrl] = useState<string>("");
 
   useEffect(() => {
     if (ready) setIsLoading(false);
@@ -67,6 +71,35 @@ export default function HomePage() {
       console.error("Failed to load projects:", error);
     }
   };
+
+  // Load IFC files for viewer tab
+  useEffect(() => {
+    const loadIfc = async () => {
+      if (!selectedProject) {
+        setIfcFiles([]);
+        setSelectedIfcUrl("");
+        return;
+      }
+      try {
+        const files = await listIfcFiles(selectedProject);
+        const mapped =
+          files
+            ?.filter((f) => f.publicUrl)
+            .map((f) => ({
+              id: f.id || f.path,
+              name: f.name,
+              url: f.publicUrl,
+            })) || [];
+        setIfcFiles(mapped);
+        setSelectedIfcUrl(mapped[0]?.url || "");
+      } catch (err) {
+        console.warn("Kunne ikke hente IFC-filer for viewer", err);
+        setIfcFiles([]);
+        setSelectedIfcUrl("");
+      }
+    };
+    loadIfc();
+  }, [selectedProject]);
 
   const handleLogin = (userData: User) => {
     login(userData);
@@ -317,21 +350,47 @@ export default function HomePage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7 bg-muted/70 border border-border/60 rounded-lg p-1">
-            <TabsTrigger value="projects">Dashboard</TabsTrigger>
-            <TabsTrigger value="models" disabled={!selectedProject}>
-              BIM Modeller
-            </TabsTrigger>
-            <TabsTrigger value="production" disabled={!selectedProject}>
-              Produksjon
-            </TabsTrigger>
-            <TabsTrigger value="controls" disabled={!selectedProject}>
-              Kontroller
-            </TabsTrigger>
-            <TabsTrigger value="viewer">Viewer (ny)</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="admin">Admin</TabsTrigger>
-          </TabsList>
+          <div className="grid grid-cols-1 md:grid-cols-[220px,1fr] gap-6 items-start">
+            <div className="flex flex-col gap-2">
+              <NavButton icon={<Building2 className="w-4 h-4" />} active={activeTab === "projects"} onClick={() => setActiveTab("projects")}>
+                Dashboard
+              </NavButton>
+              <NavButton
+                icon={<FileText className="w-4 h-4" />}
+                active={activeTab === "models"}
+                onClick={() => setActiveTab("models")}
+                disabled={!selectedProject}
+              >
+                BIM Modeller
+              </NavButton>
+              <NavButton
+                icon={<CheckCircle className="w-4 h-4" />}
+                active={activeTab === "production"}
+                onClick={() => setActiveTab("production")}
+                disabled={!selectedProject}
+              >
+                Produksjon
+              </NavButton>
+              <NavButton
+                icon={<AlertTriangle className="w-4 h-4" />}
+                active={activeTab === "controls"}
+                onClick={() => setActiveTab("controls")}
+                disabled={!selectedProject}
+              >
+                Kontroller
+              </NavButton>
+              <NavButton icon={<Eye className="w-4 h-4" />} active={activeTab === "viewer"} onClick={() => setActiveTab("viewer")}>
+                Viewer (ny)
+              </NavButton>
+              <NavButton icon={<Users className="w-4 h-4" />} active={activeTab === "users"} onClick={() => setActiveTab("users")}>
+                Users
+              </NavButton>
+              <NavButton icon={<Settings className="w-4 h-4" />} active={activeTab === "admin"} onClick={() => setActiveTab("admin")}>
+                Admin
+              </NavButton>
+            </div>
+
+            <div className="space-y-6">
 
           <TabsContent value="projects" className="space-y-6">
             <div className="flex justify-between items-center">
@@ -424,35 +483,42 @@ export default function HomePage() {
               <CardHeader>
                 <CardTitle>IFC Viewer (viewer.altbim.no)</CardTitle>
                 <CardDescription>
-                  Åpner den nye viewer-microappen. Bruk IFC-URLen (fra dokumenter/IFC-liste) som ?url-param.
+                  Sømløst innebygd viewer.altbim.no. Velg IFC fra prosjektet ditt, så åpnes den i rammen under.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="default" asChild>
-                    <a href="https://viewer.altbim.no" target="_blank" rel="noreferrer">
-                      Åpne viewer.altbim.no
-                    </a>
-                  </Button>
-                  <Button variant="outline" asChild>
-                    <a
-                      href={
-                        selectedProject
-                          ? `https://viewer.altbim.no/?url=${encodeURIComponent(
-                              "https://example.com/path/to/your.ifc"
-                            )}`
-                          : "https://viewer.altbim.no"
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Eksempel med ?url=
-                    </a>
-                  </Button>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Finn IFC-URLen i Dokumenter/IFC-liste og lim den inn som <code>?url=&lt;public-ifc-url&gt;</code>.
-                </p>
+                {!selectedProject ? (
+                  <p className="text-sm text-muted-foreground">Velg et prosjekt for å vise IFC-filer.</p>
+                ) : ifcFiles.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Ingen IFC-filer funnet i dette prosjektet.</p>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-2 max-w-xl">
+                      <Label>Velg IFC-fil</Label>
+                      <Select value={selectedIfcUrl} onValueChange={setSelectedIfcUrl}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Velg IFC..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ifcFiles.map((f) => (
+                            <SelectItem key={f.id} value={f.url}>
+                              {f.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {selectedIfcUrl && (
+                      <div className="border rounded-lg overflow-hidden h-[70vh]">
+                        <iframe
+                          src={`https://viewer.altbim.no/?url=${encodeURIComponent(selectedIfcUrl)}&embed=1`}
+                          title="IFC Viewer"
+                          className="w-full h-full"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -464,8 +530,36 @@ export default function HomePage() {
           <TabsContent value="admin" className="space-y-6">
             <ProjectManagement selectedProject={selectedProject} onProjectSelect={setSelectedProject} />
           </TabsContent>
+            </div>
+          </div>
         </Tabs>
       </main>
     </div>
+  );
+}
+
+function NavButton({
+  children,
+  icon,
+  active,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  icon: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Button
+      variant={active ? "default" : "ghost"}
+      className="justify-start gap-2 w-full"
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {icon}
+      <span>{children}</span>
+    </Button>
   );
 }
