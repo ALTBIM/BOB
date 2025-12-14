@@ -317,7 +317,7 @@ export default function HomePage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 bg-muted/70 border border-border/60 rounded-lg p-1">
+          <TabsList className="grid w-full grid-cols-7 bg-muted/70 border border-border/60 rounded-lg p-1">
             <TabsTrigger value="projects">Dashboard</TabsTrigger>
             <TabsTrigger value="models" disabled={!selectedProject}>
               BIM Modeller
@@ -328,6 +328,7 @@ export default function HomePage() {
             <TabsTrigger value="controls" disabled={!selectedProject}>
               Kontroller
             </TabsTrigger>
+            <TabsTrigger value="viewer">Viewer (ny)</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="admin">Admin</TabsTrigger>
           </TabsList>
@@ -403,6 +404,44 @@ export default function HomePage() {
               )}
             </div>
             <ProductionDashboard selectedProject={selectedProject} />
+          </TabsContent>
+
+          <TabsContent value="viewer" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>IFC Viewer (viewer.altbim.no)</CardTitle>
+                <CardDescription>
+                  Åpner den nye viewer-microappen. Bruk IFC-URLen (fra dokumenter/IFC-liste) som ?url-param.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="default" asChild>
+                    <a href="https://viewer.altbim.no" target="_blank" rel="noreferrer">
+                      Åpne viewer.altbim.no
+                    </a>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <a
+                      href={
+                        selectedProject
+                          ? `https://viewer.altbim.no/?url=${encodeURIComponent(
+                              "https://example.com/path/to/your.ifc"
+                            )}`
+                          : "https://viewer.altbim.no"
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Eksempel med ?url=
+                    </a>
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Finn IFC-URLen i Dokumenter/IFC-liste og lim den inn som <code>?url=&lt;public-ifc-url&gt;</code>.
+                </p>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="controls" className="space-y-6">
