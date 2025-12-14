@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageCircle } from "lucide-react";
+import { LayoutDashboard, MessageCircle, Eye } from "lucide-react";
 import clsx from "clsx";
 
 const navItems = [
   { name: "Dashboard", href: "/app", icon: LayoutDashboard },
+  { name: "Viewer", href: "/app/viewer", icon: Eye },
   { name: "BOB Chat", href: "/app/chat", icon: MessageCircle },
 ];
 
