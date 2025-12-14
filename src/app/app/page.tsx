@@ -406,6 +406,19 @@ export default function HomePage() {
             <ProductionDashboard selectedProject={selectedProject} />
           </TabsContent>
 
+          <TabsContent value="controls" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-semibold text-foreground">Kvalitetskontroller</h3>
+              {selectedProject && (
+                <div className="text-sm text-muted-foreground">
+                  Prosjekt: <span className="font-medium">{projects.find((p) => p.id === selectedProject)?.name}</span>
+                </div>
+              )}
+            </div>
+            <QualityControlDashboard selectedProject={selectedProject} />
+            {selectedProject && <DocumentIngestPanel projectId={selectedProject} />}
+          </TabsContent>
+
           <TabsContent value="viewer" className="space-y-6">
             <Card>
               <CardHeader>
@@ -442,19 +455,6 @@ export default function HomePage() {
                 </p>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="controls" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-foreground">Kvalitetskontroller</h3>
-              {selectedProject && (
-                <div className="text-sm text-muted-foreground">
-                  Prosjekt: <span className="font-medium">{projects.find((p) => p.id === selectedProject)?.name}</span>
-                </div>
-              )}
-            </div>
-            <QualityControlDashboard selectedProject={selectedProject} />
-            {selectedProject && <DocumentIngestPanel projectId={selectedProject} />}
           </TabsContent>
 
           <TabsContent value="users" className="space-y-6">
