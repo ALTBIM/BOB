@@ -63,6 +63,25 @@ export default function HomePage() {
     }
   }, [user]);
 
+  // Hydrate selected project from localStorage to keep selection across routes
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("bob_selected_project");
+    if (stored) {
+      setSelectedProject(stored);
+    }
+  }, []);
+
+  // Persist selection
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (selectedProject) {
+      window.localStorage.setItem("bob_selected_project", selectedProject);
+    } else {
+      window.localStorage.removeItem("bob_selected_project");
+    }
+  }, [selectedProject]);
+
   const loadUserProjects = async () => {
     if (!user) return;
     try {
@@ -564,4 +583,3 @@ function NavButton({
     </Button>
   );
 }
-
