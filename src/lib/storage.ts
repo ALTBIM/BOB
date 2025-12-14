@@ -18,18 +18,19 @@ export const uploadIfcFile = async (file: File, projectId: string) => {
       form.append("file", file);
       form.append("projectId", projectId);
       const res = await fetch("/api/ifc/upload", { method: "POST", body: form, cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        return {
-          path: data.path as string,
-          publicUrl: data.publicUrl as string,
-          provider: data.provider as string,
-          fileId: data.fileId as string | undefined,
-          modelId: data.modelId as string | undefined,
-        };
+      if (!res.ok) {
+        const text = await res.text();
+        console.warn("API upload feilet", res.status, text);
+        return null;
       }
-      const err = await res.json().catch(() => ({}));
-      console.warn("API upload feilet", err);
+      const data = await res.json();
+      return {
+        path: data.path as string,
+        publicUrl: data.publicUrl as string,
+        provider: data.provider as string,
+        fileId: data.fileId as string | undefined,
+        modelId: data.modelId as string | undefined,
+      };
     } catch (err) {
       console.warn("API upload feilet", err);
     }
@@ -109,19 +110,20 @@ export const uploadGenericFile = async (file: File, projectId: string, descripti
       form.append("projectId", projectId);
       if (description) form.append("description", description);
       const res = await fetch("/api/files/upload", { method: "POST", body: form, cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        return {
-          path: data.path as string,
-          publicUrl: data.publicUrl as string,
-          provider: data.provider as string,
-          fileId: data.fileId as string | undefined,
-          category: data.category as string | undefined,
-          hasText: data.hasText as boolean | undefined,
-        };
+      if (!res.ok) {
+        const text = await res.text();
+        console.warn("API generic upload feilet", res.status, text);
+        return null;
       }
-      const err = await res.json().catch(() => ({}));
-      console.warn("API generic upload feilet", err);
+      const data = await res.json();
+      return {
+        path: data.path as string,
+        publicUrl: data.publicUrl as string,
+        provider: data.provider as string,
+        fileId: data.fileId as string | undefined,
+        category: data.category as string | undefined,
+        hasText: data.hasText as boolean | undefined,
+      };
     } catch (err) {
       console.warn("API generic upload feilet", err);
     }
