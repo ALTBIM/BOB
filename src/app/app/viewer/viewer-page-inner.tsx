@@ -17,7 +17,7 @@ type ModelItem = {
   uploadedAt?: string;
 };
 
-export default function ViewerPage() {
+export default function ViewerPageInner() {
   const { user, ready } = useSession();
   const searchParams = useSearchParams();
   const paramProjectId = useMemo(() => searchParams.get("projectId") || "", [searchParams]);
@@ -35,7 +35,6 @@ export default function ViewerPage() {
         const list = await db.getProjectsForUser(user.id);
         setProjects(list);
         if (list.length && !projectId) {
-          // use URL param if provided
           const initial = paramProjectId && list.find((p) => p.id === paramProjectId) ? paramProjectId : list[0].id;
           setProjectId(initial);
         }
@@ -177,17 +176,5 @@ export default function ViewerPage() {
         </CardContent>
       </Card>
     </div>
-  );
-}
-"use client";
-
-import { Suspense } from "react";
-import ViewerPageInner from "./viewer-page-inner";
-
-export default function ViewerPage() {
-  return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Laster viewer...</div>}>
-      <ViewerPageInner />
-    </Suspense>
   );
 }
