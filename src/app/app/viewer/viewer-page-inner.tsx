@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/session";
 import { db, Project } from "@/lib/database";
 import { Loader2, Eye } from "lucide-react";
+import { listIfcFiles } from "@/lib/storage";
 
 type ModelItem = {
   id: string;
@@ -54,18 +55,12 @@ export default function ViewerPageInner() {
       }
       setLoadingModels(true);
       try {
-        const res = await fetch(`/api/projects/${projectId}/models`);
-        if (!res.ok) {
-          setModels([]);
-          setSelectedUrl("");
-          return;
-        }
-        const data = await res.json();
+        const storageList = await listIfcFiles(projectId);
         const items: ModelItem[] =
-          data?.models?.map((m: any) => ({
+          storageList?.map((m: any) => ({
             id: m.id || m.path,
-            name: m.filename || m.name || m.path,
-            url: m.storageUrl || m.publicUrl,
+            name: m.name || m.filename || m.path,
+            url: m.publicUrl,
             uploadedAt: m.uploadedAt,
           })) || [];
         setModels(items);
@@ -178,4 +173,3 @@ export default function ViewerPageInner() {
     </div>
   );
 }
-
