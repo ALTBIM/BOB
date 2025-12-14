@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 
 // Use CDN wasm by default to avoid 404 if /wasm is missing in prod
+const WASM_LOCAL = "/wasm/";
 const WASM_CDN = "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/";
 
 type Props = {
