@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -18,6 +19,9 @@ type ModelItem = {
 
 export default function ViewerPage() {
   const { user, ready } = useSession();
+  const searchParams = useSearchParams();
+  const paramProjectId = useMemo(() => searchParams.get("projectId") || "", [searchParams]);
+  const paramUrl = useMemo(() => searchParams.get("url") || searchParams.get("modelUrl") || "", [searchParams]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<string>("");
   const [models, setModels] = useState<ModelItem[]>([]);
@@ -31,14 +35,16 @@ export default function ViewerPage() {
         const list = await db.getProjectsForUser(user.id);
         setProjects(list);
         if (list.length && !projectId) {
-          setProjectId(list[0].id);
+          // use URL param if provided
+          const initial = paramProjectId && list.find((p) => p.id === paramProjectId) ? paramProjectId : list[0].id;
+          setProjectId(initial);
         }
       } catch (err) {
         console.warn("Kunne ikke hente prosjekter", err);
       }
     };
     loadProjects();
-  }, [user]);
+  }, [user, paramProjectId, projectId]);
 
   useEffect(() => {
     const loadModels = async () => {
@@ -64,7 +70,11 @@ export default function ViewerPage() {
             uploadedAt: m.uploadedAt,
           })) || [];
         setModels(items);
-        setSelectedUrl(items[0]?.url || "");
+        if (paramUrl) {
+          setSelectedUrl(paramUrl);
+        } else {
+          setSelectedUrl(items[0]?.url || "");
+        }
       } catch (err) {
         console.warn("Kunne ikke hente modeller", err);
         setModels([]);
@@ -74,7 +84,7 @@ export default function ViewerPage() {
       }
     };
     loadModels();
-  }, [projectId]);
+  }, [projectId, paramUrl]);
 
   if (!ready) {
     return (
