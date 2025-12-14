@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -97,7 +97,7 @@ export default function ViewerPageInner() {
   if (!user) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center text-muted-foreground">
-        Logg inn for å se viewer.
+        Logg inn for Ã¥ se viewer.
       </div>
     );
   }
@@ -112,7 +112,7 @@ export default function ViewerPageInner() {
         <Button variant="outline" size="sm" asChild>
           <a href="https://viewer.altbim.no" target="_blank" rel="noreferrer">
             <Eye className="w-4 h-4 mr-2" />
-            Åpne i nytt vindu
+            Ã…pne i nytt vindu
           </a>
         </Button>
       </div>
@@ -171,10 +171,11 @@ export default function ViewerPageInner() {
               />
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Velg en IFC-fil for å vise modellen.</p>
+            <p className="text-sm text-muted-foreground">Velg en IFC-fil for Ã¥ vise modellen.</p>
           )}
         </CardContent>
       </Card>
     </div>
   );
 }
+
