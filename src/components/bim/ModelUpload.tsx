@@ -1,4 +1,4 @@
-"use client";
+ï»¿"use client";
 
 import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -65,7 +65,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
 
     const loadExisting = async () => {
       try {
-        // Hent alle filer (ikke bare IFC) for å bruke denne fanen som en enkel dokumentoversikt inntil dedikert side finnes
+        // Hent alle filer (ikke bare IFC) for Ã¥ bruke denne fanen som en enkel dokumentoversikt inntil dedikert side finnes
         const allFiles = await listAllFiles(selectedProject);
         const mapped: ModelFile[] = allFiles.map((item) => ({
           id: item.id || item.path,
@@ -99,7 +99,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
 
   const processFiles = (fileList: File[]) => {
     if (!selectedProject) {
-      alert("Velg et prosjekt fra dropdown-menyen først");
+      alert("Velg et prosjekt fra dropdown-menyen fÃ¸rst");
       return;
     }
 
@@ -269,7 +269,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
         zones: file.zones,
         materials: file.materials,
         storageUrl,
-        description: "IFC-fil lastet opp i denne økten"
+        description: "IFC-fil lastet opp i denne Ã¸kten"
       });
       recordModelMaterials(file.projectId, created.id, materials);
     } catch (error) {
@@ -315,7 +315,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
 
   const handleGenericFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!selectedProject) {
-      alert("Velg et prosjekt først");
+      alert("Velg et prosjekt fÃ¸rst");
       return;
     }
     if (!e.target.files) return;
@@ -380,7 +380,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
         <CardContent className="text-center py-12">
           <Building2 className="w-12 h-12 text-slate-400 mx-auto mb-4" />
           <h3 className="font-medium text-slate-900 mb-2">Ingen prosjekt valgt</h3>
-          <p className="text-slate-600">Velg et prosjekt fra dropdown-menyen for å laste opp BIM-modeller</p>
+          <p className="text-slate-600">Velg et prosjekt fra dropdown-menyen for Ã¥ laste opp BIM-modeller</p>
         </CardContent>
       </Card>
     );
@@ -399,7 +399,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
           <Card>
             <CardHeader>
               <CardTitle>Last opp IFC-modeller</CardTitle>
-              <CardDescription>Last opp IFC-filer (IFC2x3, IFC4) for å trekke ut objekter, soner og materialer</CardDescription>
+              <CardDescription>Last opp IFC-filer (IFC2x3, IFC4) for Ã¥ trekke ut objekter, soner og materialer</CardDescription>
             </CardHeader>
             <CardContent>
               <div
@@ -411,8 +411,8 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                 onDrop={handleDrop}
               >
                 <Upload className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-                <h3 className="text-lg font-medium mb-2">Dra IFC-filer hit eller klikk for å velge</h3>
-                <p className="text-slate-500 mb-4">Støtter .ifc og .ifczip filer opp til 500MB</p>
+                <h3 className="text-lg font-medium mb-2">Dra IFC-filer hit eller klikk for Ã¥ velge</h3>
+                <p className="text-slate-500 mb-4">StÃ¸tter .ifc og .ifczip filer opp til 500MB</p>
                 <input type="file" multiple accept=".ifc,.ifczip" onChange={handleFileSelect} className="hidden" id="file-upload" />
                 <Button asChild>
                   <label htmlFor="file-upload" className="cursor-pointer">
@@ -531,7 +531,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                             </Badge>
                             {viewerUrl && (
                               <Button variant="outline" size="sm" asChild>
-                                <a href={viewerUrl} target="_blank" rel="noreferrer" title="Åpne i xeokit-viewer">
+                                <a href={viewerUrl} target="_blank" rel="noreferrer" title="Ã…pne i xeokit-viewer">
                                   <Eye className="w-4 h-4 mr-1" />
                                   Vis
                                 </a>
@@ -574,7 +574,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                   <div className="text-center py-8">
                     <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                     <h4 className="font-medium mb-2">Ingen modeller lastet opp</h4>
-                    <p className="text-slate-500 mb-4">Ingen modeller er lastet opp ennå for dette prosjektet.</p>
+                    <p className="text-slate-500 mb-4">Ingen modeller er lastet opp ennÃ¥ for dette prosjektet.</p>
                   </div>
                 )}
               </div>
@@ -613,7 +613,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                               <span className="font-medium">{file.name}</span>
                             </div>
                             <div className="text-xs text-slate-500">
-                              {formatFileSize(file.size)} · {file.category || "ukjent"}
+                              {formatFileSize(file.size)} Â· {file.category || "ukjent"}
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
