@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ import {
   Download
 } from "lucide-react";
 import { Project, User, BIMModel, ProjectStatus, ProjectType, db } from "@/lib/database";
+import { uploadIfcFile } from "@/lib/storage";
 
 interface ProjectManagementProps {
   selectedProject: string | null;
@@ -38,6 +39,8 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
   const [isLoading, setIsLoading] = useState(true);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [newProject, setNewProject] = useState({
     name: "",
@@ -107,6 +110,45 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const handleUploadIfc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selectedProject) {
+      alert("Velg et prosjekt først.");
+      return;
+    }
+    if (!e.target.files || e.target.files.length === 0) return;
+    setIsUploading(true);
+    try {
+      const file = e.target.files[0];
+      const res = await uploadIfcFile(file, selectedProject);
+      if (res?.publicUrl) {
+        const newModel: BIMModel = {
+          id: res.fileId || res.path,
+          name: file.name,
+          filename: file.name,
+          size: file.size,
+          projectId: selectedProject,
+          uploadedBy: "Du",
+          uploadedAt: new Date().toISOString(),
+          status: "completed",
+          version: 1,
+          storageUrl: res.publicUrl,
+          objects: 0,
+          zones: 0,
+          materials: 0,
+        };
+        setModels((prev) => [newModel, ...prev]);
+      } else {
+        alert("Opplasting feilet. Sjekk konsollen for detaljer.");
+      }
+    } catch (err) {
+      console.warn("Upload feilet", err);
+      alert("Opplasting feilet. Sjekk konsollen for detaljer.");
+    } finally {
+      setIsUploading(false);
+      e.target.value = "";
+    }
   };
 
   const selectedProjectData = projects.find(p => p.id === selectedProject);
@@ -430,10 +472,19 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
                     <CardTitle>Project Files</CardTitle>
                     <CardDescription>BIM models and documents for {selectedProjectData.name}</CardDescription>
                   </div>
-                  <Button size="sm">
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload File
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".ifc,.ifczip"
+                      className="hidden"
+                      onChange={handleUploadIfc}
+                    />
+                    <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                      <Upload className="w-4 h-4 mr-2" />
+                      {isUploading ? "Laster opp..." : "Upload IFC"}
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
