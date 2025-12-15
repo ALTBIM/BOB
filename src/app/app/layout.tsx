@@ -2,13 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageCircle, Eye, Folder, FilePlus2, Files, Box } from "lucide-react";
+import { LayoutDashboard, MessageCircle, Eye, Folder, FilePlus2, Files, Box, Wrench, ShieldCheck, Users, Settings, Cube } from "lucide-react";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
 
 const primaryNav = [
   { name: "Dashboard", href: "/app", icon: LayoutDashboard },
+  { name: "BIM Modeller", href: "/app/models", icon: Cube },
+  { name: "Produksjon", href: "/app/production", icon: Wrench },
+  { name: "Kontroller", href: "/app/controls", icon: ShieldCheck },
   { name: "Viewer", href: "/app/viewer", icon: Eye },
+  { name: "Users", href: "/app/users", icon: Users },
+  { name: "Admin", href: "/app/admin", icon: Settings },
   { name: "BOB Chat", href: "/app/chat", icon: MessageCircle },
 ];
 
