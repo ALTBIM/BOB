@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 
-// Use CDN wasm by default to avoid 404 if /wasm is missing in prod
+// Use local /wasm first (copied by postinstall), CDN as fallback
+const WASM_LOCAL = "/wasm/";
 const WASM_CDN = "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/";
 
 type Props = {
@@ -36,9 +37,9 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
     setError(null);
 
     try {
-      const [{ default: THREE }, { IFCLoader }] = await Promise.all([
+      const [{ default: THREE }, { IFCLoader, OrbitControls }] = await Promise.all([
         import("three"),
-        import("three/examples/jsm/loaders/IFCLoader.js"),
+        import("three-stdlib"),
       ]);
 
       const width = containerRef.current.clientWidth || 640;
@@ -68,14 +69,17 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
       const grid = new THREE.GridHelper(20, 20, 0xe2e8f0, 0xe2e8f0);
       scene.add(grid);
 
-      const controlsModule = await import("three/examples/jsm/controls/OrbitControls.js");
-      const OrbitControls = (controlsModule as any).OrbitControls || controlsModule.default;
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.target.set(0, 1, 0);
       controls.update();
 
       const loader = new IFCLoader();
-      loader.ifcManager.setWasmPath(WASM_CDN);
+      try {
+        loader.ifcManager.setWasmPath(WASM_LOCAL);
+      } catch (err) {
+        console.warn("Failed to set local wasm path, using CDN", err);
+        loader.ifcManager.setWasmPath(WASM_CDN);
+      }
 
       let arrayBuffer: ArrayBuffer;
       if (file) {
@@ -152,9 +156,11 @@ export function IfcViewerPanel({ file, fileUrl, modelName }: Props) {
         </Alert>
       )}
       <p className="text-xs text-slate-500">
-        Viewer prÃ¸ver {WASM_LOCAL} fÃ¸rst (fallback {WASM_CDN}). For produksjon bÃ¸r wasm hostes lokalt under /public/wasm.
+        Viewer prøver {WASM_LOCAL} først (fallback {WASM_CDN}). For produksjon bør wasm hostes lokalt under /public/wasm.
       </p>
       {modelName && <p className="text-xs text-slate-500">Modell: {modelName}</p>}
     </div>
   );
 }
+
+
