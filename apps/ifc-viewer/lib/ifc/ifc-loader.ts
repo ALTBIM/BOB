@@ -41,6 +41,9 @@ export class IFCModelLoader {
       console.log("[v0] Setting WASM path to /ifc/")
       await this.ifcLoader.ifcManager.setWasmPath("/ifc/")
 
+      console.log("[v0] Enabling web workers for IFC parsing")
+      this.ifcLoader.ifcManager.useWebWorkers(true, "/ifc/web-ifc-mt.worker.js")
+
       console.log("[v0] Applying WebIFC config...")
       await this.ifcLoader.ifcManager.applyWebIfcConfig({
         COORDINATE_TO_ORIGIN: true,
