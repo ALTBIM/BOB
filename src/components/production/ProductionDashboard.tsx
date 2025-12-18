@@ -79,7 +79,6 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   const [files, setFiles] = useState<ModelFile[]>([]);
   const [existingFiles, setExistingFiles] = useState<ModelFile[]>([]);
   const [supabaseFiles, setSupabaseFiles] = useState<ModelFile[]>([]);
-  const [viewerSource, setViewerSource] = useState<{ fileUrl?: string; modelName?: string } | null>(null);
   const [isDrawingExporting, setIsDrawingExporting] = useState(false);
   const [banner, setBanner] = useState<{ type: "info" | "error"; text: string } | null>(null);
   const [supabaseDiagnostics, setSupabaseDiagnostics] = useState<{
@@ -97,21 +96,8 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     } else {
       setAvailableModels([]);
       setSelectedModel("");
-      setViewerSource(null);
     }
   }, [selectedProject]);
-
-  useEffect(() => {
-    if (!viewerSource && supabaseFiles.length > 0) {
-      const candidate = supabaseFiles[0];
-      if (candidate.storageUrl || candidate.fileUrl) {
-        setViewerSource({
-          fileUrl: candidate.storageUrl || candidate.fileUrl,
-          modelName: candidate.name,
-        });
-      }
-    }
-  }, [supabaseFiles, viewerSource]);
 
   useEffect(() => {
     if (selectedProject && selectedModel) {
@@ -211,12 +197,6 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
       if (storageModels.length > 0 && !selectedModel) {
         setSelectedModel(storageModels[0].id);
-        if (storageModels[0].storageUrl || storageModels[0].filename) {
-          setViewerSource({
-            fileUrl: storageModels[0].storageUrl || storageModels[0].filename,
-            modelName: storageModels[0].name,
-          });
-        }
       }
     } catch (error) {
       console.error("Failed to load models:", error);
@@ -301,12 +281,6 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                       setSelectedMaterials([]);
                     }
                     setExistingFiles((existing) => [...existing, { ...completedFile }]);
-                    if (completedFile.storageUrl || completedFile.fileUrl) {
-                      setViewerSource({
-                        fileUrl: completedFile.storageUrl || completedFile.fileUrl,
-                        modelName: completedFile.name,
-                      });
-                    }
     setSupabaseFiles((existing) => {
       const already = existing.some((entry) => entry.path === completedFile.path || entry.id === completedFile.id);
       if (already) return existing;
@@ -954,12 +928,6 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                       )}
                     </Button>
                     <p className="pt-2">2) Se geometri (eksperimentell web-ifc viewer)</p>
-                    <IfcViewerPanel
-                      file={existingFiles.find((f) => f.id === selectedModel)?.rawFile}
-                      fileUrl={viewerSource?.fileUrl}
-                      modelName={viewerSource?.modelName || availableModels.find((m) => m.id === selectedModel)?.name}
-                      autoLoad
-                    />
                   </div>
                 </>
               )}
@@ -1023,18 +991,15 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setViewerSource({
-                                fileUrl: file.storageUrl || file.fileUrl,
-                                modelName: file.name,
-                              })
-                            }
-                          >
-                            Vis i viewer
-                          </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      asChild
+                    >
+                      <a href={file.storageUrl || file.fileUrl || "#"} target="_blank" rel="noreferrer">
+                        Åpne
+                      </a>
+                    </Button>
                           {file.storageUrl || file.fileUrl ? (
                             <Button variant="outline" size="sm" asChild>
                               <a href={file.storageUrl || file.fileUrl} target="_blank" rel="noreferrer">
