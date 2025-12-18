@@ -7,34 +7,51 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Building2, Mail, Lock } from "lucide-react";
+import { db, type User } from "@/lib/database";
 
 interface LoginFormProps {
-  onLogin: (user: any) => void;
+  onLogin: (user: User) => void;
 }
 
 export default function LoginForm({ onLogin }: LoginFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [loginData, setLoginData] = useState({
     email: "",
-    password: ""
+    password: "",
   });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      const user = {
-        id: "1",
-        name: "Andreas Nilsen",
-        email: loginData.email,
-        role: "project_admin",
-        company: "Construction Solutions AS"
-      };
-      onLogin(user);
+    setError(null);
+
+    const email = loginData.email.trim().toLowerCase();
+    const password = loginData.password.trim();
+
+    if (!email || !password) {
+      setError("E-post og passord kan ikke være tomme.");
       setIsLoading(false);
-    }, 1000);
+      return;
+    }
+
+    try {
+      const user = await db.authenticateUser(email, password);
+
+      if (!user) {
+        setError("Ugyldig pålogging. Kontroller e-post og passord og prøv igjen.");
+        setIsLoading(false);
+        return;
+      }
+
+      onLogin(user);
+      setLoginData({ email: "", password: "" });
+    } catch (err) {
+      console.error("Login failed", err);
+      setError("Noe gikk galt under pålogging. Prøv igjen senere.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -61,10 +78,12 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
               <CardHeader>
                 <CardTitle>Welcome back</CardTitle>
                 <CardDescription>
-                  Sign in to your BOB account to manage your construction projects
+                  Sign in with your administrator account to manage BOB
+                  innstillinger og tilgang.
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
@@ -99,15 +118,14 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? "Signing in..." : "Sign In"}
                   </Button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Admin-pålogging: admin@bob.no / bobadmin
+                  </p>
                 </form>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
-
-        <div className="mt-6 text-center text-sm text-slate-600">
-          <p>Demo credentials: any email/password combination</p>
-        </div>
       </div>
     </div>
   );

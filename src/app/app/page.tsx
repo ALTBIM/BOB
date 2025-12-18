@@ -15,7 +15,7 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { DocumentIngestPanel } from "@/components/rag/DocumentIngestPanel";
 
 export default function HomePage() {
-  const { user, ready, login, logout } = useSession();
+  const { user, ready, login, logout, demoContentEnabled, setDemoContentEnabled } = useSession();
   const [isLoading, setIsLoading] = useState(true);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
@@ -71,6 +71,10 @@ export default function HomePage() {
   const handleLogout = () => {
     logout();
     setSelectedProject(null);
+  };
+
+  const handleToggleDemoContent = () => {
+    setDemoContentEnabled(!demoContentEnabled);
   };
 
   const handleProjectCreate = (newProject: Project) => {
@@ -153,6 +157,16 @@ export default function HomePage() {
                 <div className="bg-primary/10 text-primary-foreground flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold">
                   {userInitials}
                 </div>
+                {user.role === "super_admin" && (
+                  <Button
+                    variant={demoContentEnabled ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={handleToggleDemoContent}
+                    className="whitespace-nowrap"
+                  >
+                    {demoContentEnabled ? "Slå av demo" : "Slå på demo"}
+                  </Button>
+                )}
                 <ThemeToggle />
                 <Button variant="ghost" size="sm" onClick={handleLogout}>
                   Logg ut
@@ -273,7 +287,13 @@ export default function HomePage() {
                 <CardDescription>Tekstuttrekk for chat/kontroller fra prosjektets dokumenter.</CardDescription>
               </CardHeader>
               <CardContent>
-                <DocumentIngestPanel projectId={selectedProject} />
+                {demoContentEnabled ? (
+                  <DocumentIngestPanel projectId={selectedProject} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Demo-innhold er slått av. Slå det på igjen fra toppmenyen for å teste dokumentflyten.
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}

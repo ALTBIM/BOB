@@ -58,6 +58,8 @@ interface ModelFile {
   materialList?: string[];
   fileUrl?: string;
   storageUrl?: string;
+  provider?: string;
+  path?: string;
 }
 
 type Quantities = {
@@ -76,8 +78,17 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   const [generatedList, setGeneratedList] = useState<QuantityList | null>(null);
   const [files, setFiles] = useState<ModelFile[]>([]);
   const [existingFiles, setExistingFiles] = useState<ModelFile[]>([]);
+  const [supabaseFiles, setSupabaseFiles] = useState<ModelFile[]>([]);
   const [isDrawingExporting, setIsDrawingExporting] = useState(false);
   const [banner, setBanner] = useState<{ type: "info" | "error"; text: string } | null>(null);
+  const [supabaseDiagnostics, setSupabaseDiagnostics] = useState<{
+    count: number;
+    providers: string[];
+    bucket: string;
+    lastUpdated: string;
+    message?: string;
+  } | null>(null);
+  const bucketName = process.env.NEXT_PUBLIC_SUPABASE_IFC_BUCKET || "ifc-models";
 
   useEffect(() => {
     if (selectedProject) {
@@ -157,6 +168,17 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         storageUrl: item.publicUrl,
       }));
       setExistingFiles(storedFiles);
+      setSupabaseFiles(storedFiles);
+      setSupabaseDiagnostics({
+        count: storedFiles.length,
+        providers: Array.from(new Set(storedFiles.map((file) => file.provider || "supabase"))),
+        bucket: bucketName,
+        lastUpdated: new Date().toISOString(),
+        message:
+          storedFiles.length === 0
+            ? "Ingen lagrede IFC-filer funnet. Last opp en modell for å aktivere viewer og mengdelister."
+            : undefined,
+      });
 
       const storageModels: BIMModel[] = stored.map((item) => ({
         id: item.path,
@@ -178,6 +200,13 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       }
     } catch (error) {
       console.error("Failed to load models:", error);
+      setSupabaseDiagnostics({
+        count: 0,
+        providers: [],
+        bucket: bucketName,
+        lastUpdated: new Date().toISOString(),
+        message: "Kunne ikke kommunisere med Supabase/Blob. Kontroller env-vars og nettverk.",
+      });
     }
   };
 
@@ -252,6 +281,30 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                       setSelectedMaterials([]);
                     }
                     setExistingFiles((existing) => [...existing, { ...completedFile }]);
+                    setSupabaseFiles((existing) => {
+                      const already = existing.some(
+                        (entry) => entry.path === completedFile.path || entry.id === completedFile.id
+                      );
+                      if (already) return existing;
+                      return [
+                        ...existing,
+                        {
+                          id: completedFile.id,
+                          name: completedFile.name,
+                          size: completedFile.size,
+                          type: completedFile.type,
+                          status: completedFile.status,
+                          progress: completedFile.progress,
+                          projectId: completedFile.projectId,
+                          uploadedAt: completedFile.uploadedAt,
+                          uploadedBy: completedFile.uploadedBy,
+                          fileUrl: completedFile.fileUrl,
+                          storageUrl: completedFile.storageUrl,
+                          provider: "supabase",
+                          path: completedFile.storageUrl || completedFile.fileUrl,
+                        },
+                      ];
+                    });
                     return completedFile;
                   })
                 );
@@ -911,6 +964,64 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
           </Card>
         </TabsContent>
         <TabsContent value="files" className="space-y-6">
+          {supabaseDiagnostics && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Lagrede IFC-filer (Supabase)</CardTitle>
+                <CardDescription>
+                  Bucket <span className="font-mono">{supabaseDiagnostics.bucket}</span> ·{" "}
+                  {supabaseDiagnostics.providers.join(", ") || "Supabase"} ·{" "}
+                  {supabaseDiagnostics.count} fil{supabaseDiagnostics.count === 1 ? "" : "er"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-sm text-slate-600">
+                    Sist sjekket: {new Date(supabaseDiagnostics.lastUpdated).toLocaleTimeString("no-NO")}
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => loadProjectModels()}>
+                    Oppdater liste
+                  </Button>
+                </div>
+                {supabaseDiagnostics.message && (
+                  <p className="text-xs text-slate-500">{supabaseDiagnostics.message}</p>
+                )}
+                {supabaseFiles.length === 0 ? (
+                  <p className="text-sm text-slate-600">Ingen IFC-filer funnet i lagringen ennå.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {supabaseFiles.slice(0, 5).map((file) => (
+                      <div
+                        key={file.path || file.id}
+                        className="flex items-center justify-between rounded-lg border border-dashed px-3 py-2 text-sm"
+                      >
+                        <div>
+                          <p className="font-medium">{file.name}</p>
+                          <p className="text-xs text-slate-500">
+                            {file.provider || "supabase"} · {file.uploadedAt ? formatDate(file.uploadedAt) : "nylig"}
+                          </p>
+                        </div>
+                        {file.storageUrl || file.fileUrl ? (
+                          <Button
+                            asChild
+                            variant="ghost"
+                            size="sm"
+                            className="flex items-center gap-1"
+                          >
+                            <a href={file.storageUrl || file.fileUrl} target="_blank" rel="noreferrer">
+                              Åpne
+                            </a>
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-slate-500">Ingen URL</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
           <ProjectFiles selectedProject={selectedProject} />
         </TabsContent>
       </Tabs>

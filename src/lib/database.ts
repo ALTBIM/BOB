@@ -63,7 +63,23 @@ export type ModelStatus = 'uploading' | 'processing' | 'completed' | 'error';
 
 // Mock database implementation
 class MockDatabase {
+  private storageKey = 'bob_mock_users';
+  private storageHydrated = false;
+  private credentials: Record<string, { password: string; userId: string }> = {
+    'admin@bob.no': { password: 'bobadmin', userId: 'admin-1' }
+  };
   private users: User[] = [
+    {
+      id: 'admin-1',
+      name: 'BOB Administrator',
+      email: 'admin@bob.no',
+      role: 'super_admin',
+      company: 'ALTBIM',
+      phone: '+47 000 00 000',
+      createdAt: '2024-01-01T00:00:00Z',
+      lastLogin: '2024-01-10T08:00:00Z',
+      isActive: true
+    },
     {
       id: '1',
       name: 'Andreas Hansen',
@@ -255,20 +271,32 @@ class MockDatabase {
     }
   ];
 
+  private hydrateFromStorage() {
+    this.storageHydrated = true;
+  }
+
+  private persistUsers() {
+    // Persistence disabled to avoid carrying over demo users between sessions
+  }
+
   // User operations
   async getUsers(): Promise<User[]> {
+    this.hydrateFromStorage();
     return [...this.users];
   }
 
   async getUserById(id: string): Promise<User | null> {
+    this.hydrateFromStorage();
     return this.users.find(user => user.id === id) || null;
   }
 
   async getUserByEmail(email: string): Promise<User | null> {
-    return this.users.find(user => user.email === email) || null;
+    this.hydrateFromStorage();
+    return this.users.find(user => user.email.toLowerCase() === email.toLowerCase()) || null;
   }
 
   async createUser(userData: Omit<User, 'id' | 'createdAt' | 'isActive'>): Promise<User> {
+    this.hydrateFromStorage();
     const newUser: User = {
       ...userData,
       id: `user-${Date.now()}`,
@@ -276,14 +304,17 @@ class MockDatabase {
       isActive: true
     };
     this.users.push(newUser);
+    this.persistUsers();
     return newUser;
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<User | null> {
+    this.hydrateFromStorage();
     const userIndex = this.users.findIndex(user => user.id === id);
     if (userIndex === -1) return null;
-    
+
     this.users[userIndex] = { ...this.users[userIndex], ...updates };
+    this.persistUsers();
     return this.users[userIndex];
   }
 
@@ -374,37 +405,21 @@ class MockDatabase {
 
   // Authentication
   async authenticateUser(email: string, password: string): Promise<User | null> {
-    // DEMO MODE: Accept any email/password combination
-    // In production, you would hash and compare passwords
-    
-    // First check if user exists in database
-    let user = await this.getUserByEmail(email);
-    
-    if (user && user.isActive) {
-      // Update last login for existing user
-      await this.updateUser(user.id, { lastLogin: new Date().toISOString() });
-      return user;
+    this.hydrateFromStorage();
+    const normalizedEmail = email.toLowerCase();
+    const credentials = this.credentials[normalizedEmail];
+
+    if (!credentials || credentials.password !== password) {
+      return null;
     }
-    
-    // DEMO MODE: If user doesn't exist, create a demo user
-    if (!user && email && password) {
-      const demoUser: User = {
-        id: `demo-${Date.now()}`,
-        name: email.split('@')[0].replace(/[^a-zA-Z]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Demo User',
-        email: email,
-        role: 'company_admin', // Give demo users admin access
-        company: 'Demo Company AS',
-        phone: '+47 123 45 678',
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
-        isActive: true
-      };
-      
-      this.users.push(demoUser);
-      return demoUser;
+
+    const user = await this.getUserByEmail(email);
+    if (!user || !user.isActive) {
+      return null;
     }
-    
-    return null;
+
+    const updatedUser = await this.updateUser(user.id, { lastLogin: new Date().toISOString() });
+    return updatedUser;
   }
 }
 
