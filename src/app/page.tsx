@@ -1,8 +1,17 @@
 ﻿"use client";
 
+import { useDeviceType } from "@/hooks/use-device-type";
+
 export default function LandingPage() {
+  const deviceType = useDeviceType();
+  const deviceLabel = {
+    desktop: "PC",
+    tablet: "Nettbrett",
+    mobile: "Telefon",
+  }[deviceType];
+
   return (
-    <div className="landing-page">
+    <div className={`landing-page ${deviceType}`}>
       <header className="landing-header">
         <div className="logo">
           ALTBIM <span>Bygg &amp; BIM</span>
@@ -11,6 +20,16 @@ export default function LandingPage() {
           Logg inn / Test BOB
         </a>
       </header>
+
+      <div className="device-banner" role="status" aria-live="polite">
+        <div className="device-dot" />
+        <div className="device-text">
+          <div className="device-label">Oppdaget enhet: {deviceLabel}</div>
+          <p className="device-helper">
+            Siden finjusterer layout, tekstst&oslash;rrelser og knapper for {deviceLabel.toLowerCase()}-opplevelsen din.
+          </p>
+        </div>
+      </div>
 
       <main className="landing-main">
         <section className="hero">
@@ -85,6 +104,14 @@ export default function LandingPage() {
           padding: 0 1.5rem 1.5rem;
         }
 
+        .landing-page.tablet {
+          padding: 0 1.25rem 1.25rem;
+        }
+
+        .landing-page.mobile {
+          padding: 0 1rem 1rem;
+        }
+
         .landing-header {
           padding: 1.5rem 0 0.5rem;
           display: flex;
@@ -127,12 +154,68 @@ export default function LandingPage() {
           border-color: #22c55e;
         }
 
+        .device-banner {
+          max-width: 1000px;
+          margin: 0.25rem auto 0;
+          width: 100%;
+          border: 1px solid hsl(var(--border));
+          background: rgba(34, 197, 94, 0.08);
+          border-radius: 16px;
+          padding: 0.75rem 1rem;
+          display: grid;
+          grid-template-columns: auto 1fr;
+          gap: 0.75rem;
+          align-items: center;
+          box-shadow: 0 12px 28px rgba(34, 197, 94, 0.1);
+        }
+
+        .device-dot {
+          width: 12px;
+          height: 12px;
+          border-radius: 999px;
+          background: #22c55e;
+          box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.12);
+        }
+
+        .device-text {
+          display: grid;
+          gap: 0.2rem;
+        }
+
+        .device-label {
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          font-size: 0.85rem;
+        }
+
+        .device-helper {
+          margin: 0;
+          color: hsl(var(--muted-foreground));
+          font-size: 0.9rem;
+        }
+
+        .landing-page.mobile .device-banner {
+          grid-template-columns: 1fr;
+          align-items: flex-start;
+          padding: 0.9rem 1rem;
+          gap: 0.5rem;
+        }
+
         .landing-main {
           flex: 1;
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 2rem 0 3rem;
+        }
+
+        .landing-page.tablet .landing-main {
+          padding: 1.75rem 0 2.5rem;
+        }
+
+        .landing-page.mobile .landing-main {
+          padding: 1.25rem 0 2rem;
         }
 
         .hero {
@@ -142,6 +225,16 @@ export default function LandingPage() {
           grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
           gap: 3rem;
           align-items: center;
+        }
+
+        .landing-page.tablet .hero {
+          gap: 2.25rem;
+          grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+        }
+
+        .landing-page.mobile .hero {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 1.5rem;
         }
 
         @media (max-width: 800px) {
@@ -182,6 +275,14 @@ export default function LandingPage() {
           margin: 0 0 1rem;
         }
 
+        .landing-page.tablet h1 {
+          font-size: clamp(2rem, 5vw, 3rem);
+        }
+
+        .landing-page.mobile h1 {
+          font-size: 1.9rem;
+        }
+
         h1 span {
           display: block;
           color: hsl(var(--foreground));
@@ -201,12 +302,26 @@ export default function LandingPage() {
           margin-bottom: 1.75rem;
         }
 
+        .landing-page.mobile .tagline,
+        .landing-page.mobile .lead {
+          font-size: 0.95rem;
+        }
+
         .actions {
           display: flex;
           flex-wrap: wrap;
           gap: 0.75rem;
           align-items: center;
           margin-bottom: 2rem;
+        }
+
+        .landing-page.tablet .actions {
+          gap: 0.6rem;
+        }
+
+        .landing-page.mobile .actions {
+          flex-direction: column;
+          align-items: stretch;
         }
 
         .btn-primary,
@@ -222,6 +337,13 @@ export default function LandingPage() {
           white-space: nowrap;
           color: #020617;
           font-weight: 600;
+        }
+
+        .landing-page.mobile .btn-primary,
+        .landing-page.mobile .btn-ghost,
+        .landing-page.mobile .btn-link {
+          width: 100%;
+          justify-content: center;
         }
 
         .btn-primary {
@@ -265,6 +387,10 @@ export default function LandingPage() {
           background: radial-gradient(circle at top, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.97));
           padding: 1.5rem 1.6rem;
           box-shadow: 0 24px 60px rgba(15, 23, 42, 0.9);
+        }
+
+        .landing-page.mobile .card {
+          padding: 1.25rem 1.35rem;
         }
 
         .card-title {
