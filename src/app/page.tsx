@@ -1,6 +1,16 @@
 ﻿"use client";
 
+import { useDeviceType } from "../lib/hooks/use-device-type";
+
+const DEVICE_MESSAGES: Record<"mobile" | "tablet" | "desktop", string> = {
+  mobile: "Mobil – hero og kort stables vertikalt for rask veiledning på små skjermer.",
+  tablet: "Tablet – ekstra luft og to-kolonne der det gir mening for større fingerspenn.",
+  desktop: "Desktop – bred layout slik at hele kontrollrommet er synlig samtidig.",
+};
+
 export default function LandingPage() {
+  const deviceType = useDeviceType();
+  const heroClass = deviceType === "desktop" ? "hero" : `hero hero-${deviceType}`;
   return (
     <div className="landing-page">
       <header className="landing-header">
@@ -11,9 +21,13 @@ export default function LandingPage() {
           Logg inn / Test BOB
         </a>
       </header>
+      <div className="device-indicator">
+        <div className="device-indicator-title">Enhet: {deviceType}</div>
+        <p>{DEVICE_MESSAGES[deviceType]}</p>
+      </div>
 
       <main className="landing-main">
-        <section className="hero">
+        <section className={heroClass}>
           <div className="hero-text">
             <div className="pill">
               <div className="pill-dot"></div>
@@ -306,6 +320,38 @@ export default function LandingPage() {
           text-decoration: underline;
         }
 
+        .device-indicator {
+          max-width: 1000px;
+          margin: -0.5rem auto 1.75rem;
+          padding: 0.85rem 1.25rem;
+          border-radius: 1rem;
+          border: 1px solid hsl(var(--border));
+          background: hsl(var(--card));
+          box-shadow: 0 20px 45px rgba(15, 23, 42, 0.45);
+          display: flex;
+          flex-direction: column;
+          gap: 0.35rem;
+        }
+        .device-indicator-title {
+          font-size: 0.85rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: hsl(var(--muted-foreground));
+        }
+        .device-indicator p {
+          margin: 0;
+          font-size: 0.95rem;
+          color: hsl(var(--foreground));
+        }
+        .hero-mobile {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 2rem;
+          text-align: left;
+        }
+        .hero-tablet {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 2.5rem;
+        }
         .landing-footer {
           font-size: 0.75rem;
           color: #6b7280;
