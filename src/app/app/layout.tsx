@@ -2,9 +2,24 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageCircle, Eye, Folder, FilePlus2, Files, Box, Wrench, ShieldCheck, Users, Settings } from "lucide-react";
+import { Menu } from "lucide-react";
+import {
+  LayoutDashboard,
+  MessageCircle,
+  Eye,
+  Folder,
+  FilePlus2,
+  Files,
+  Box,
+  Wrench,
+  ShieldCheck,
+  Users,
+  Settings,
+} from "lucide-react";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
+
+import { useDeviceType } from "@/hooks/use-device-type";
 
 const primaryNav = [
   { name: "Dashboard", href: "/app", icon: LayoutDashboard },
@@ -26,6 +41,9 @@ const filesNav = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [filesOpen, setFilesOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const deviceType = useDeviceType();
+  const isMobile = deviceType !== "desktop";
 
   useEffect(() => {
     const saved = typeof window !== "undefined" ? window.localStorage.getItem("bob_sidebar_files_open") : null;
@@ -42,11 +60,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (filesNav.some((item) => item.href === pathname)) {
       setFilesOpen(true);
     }
+    setMobileNavOpen(false);
   }, [pathname]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex">
-      <aside className="w-64 border-r border-border/70 bg-card flex flex-col">
+    <div className={clsx("min-h-screen bg-background text-foreground flex", isMobile && "relative flex-col overflow-x-hidden")}>
+      <aside
+        className={clsx(
+          "w-64 border-r border-border/70 bg-card flex flex-col z-40 transition-transform duration-200 ease-in-out",
+          isMobile ? "fixed inset-y-0 -translate-x-full shadow-2xl" : "relative translate-x-0",
+          mobileNavOpen && "translate-x-0"
+        )}
+        id="mobile-sidebar"
+        aria-hidden={isMobile && !mobileNavOpen}
+      >
         <div className="px-5 py-4 border-b border-border/70">
           <div className="text-lg font-semibold">BOB</div>
           <p className="text-xs text-muted-foreground mt-1">BIM &amp; Operations</p>
@@ -118,8 +145,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </aside>
-      <main className="flex-1">
-        <div className="max-w-7xl mx-auto px-6 py-6">{children}</div>
+      {isMobile && mobileNavOpen && (
+        <button
+          type="button"
+          aria-label="Lukk meny"
+          className="fixed inset-0 bg-black/40 backdrop-blur-[1px] z-30"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+      <main className={clsx("flex-1", isMobile && "w-full")}>
+        <div className={clsx("max-w-7xl mx-auto px-6 py-6", isMobile && "px-4")}>
+          {isMobile && (
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen((v) => !v)}
+                className="inline-flex items-center gap-2 rounded-md border border-border/70 bg-card px-3 py-2 text-sm font-medium shadow-sm"
+                aria-expanded={mobileNavOpen}
+                aria-controls="mobile-sidebar"
+              >
+                <Menu className="h-4 w-4" />
+                Meny
+              </button>
+              <span className="text-xs text-muted-foreground uppercase tracking-wide">{deviceType === "tablet" ? "Nettbrett" : "Mobil"}</span>
+            </div>
+          )}
+          {children}
+        </div>
       </main>
     </div>
   );
