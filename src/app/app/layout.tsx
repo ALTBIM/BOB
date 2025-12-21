@@ -2,24 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  MessageCircle,
-  Eye,
-  Folder,
-  FilePlus2,
-  Files,
-  Box,
-  Wrench,
-  ShieldCheck,
-  Users,
-  Settings,
-  Menu,
-  X,
-} from "lucide-react";
+import { LayoutDashboard, MessageCircle, Eye, Folder, FilePlus2, Files, Box, Wrench, ShieldCheck, Users, Settings, Menu } from "lucide-react";
 import clsx from "clsx";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTrigger } from "@/components/ui/sheet";
 import { useDeviceType } from "@/lib/hooks/use-device-type";
 
 const primaryNav = [
@@ -52,15 +39,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const overlayClass = useMemo(
-    () =>
-      clsx(
-        "fixed inset-0 z-40 md:hidden pointer-events-none transition-opacity duration-300",
-        mobileNavOpen ? "opacity-100 pointer-events-auto" : "opacity-0"
-      ),
-    [mobileNavOpen]
-  );
-
   useEffect(() => {
     const saved = typeof window !== "undefined" ? window.localStorage.getItem("bob_sidebar_files_open") : null;
     if (saved === "true") setFilesOpen(true);
@@ -79,16 +57,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
-    if (!isTouchView) {
-      setMobileNavOpen(false);
-    }
-  }, [isTouchView]);
-
-  useEffect(() => {
     if (mobileNavOpen) {
       setMobileNavOpen(false);
     }
   }, [pathname]);
+
+  useEffect(() => {
+    if (!isTouchView && mobileNavOpen) {
+      setMobileNavOpen(false);
+    }
+  }, [isTouchView, mobileNavOpen]);
 
   const renderNavLinks = (onItemClick?: () => void) => (
     <nav className="flex-1 px-3 py-4 space-y-1">
@@ -169,53 +147,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </aside>
       </div>
 
-      {isTouchView && (
-        <div className={overlayClass} aria-hidden={!mobileNavOpen}>
-          <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" onClick={() => setMobileNavOpen(false)} />
-          <aside
-            className={clsx(
-              "absolute inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-border/70 bg-card transition-transform duration-300 shadow-2xl",
-              mobileNavOpen ? "translate-x-0" : "-translate-x-full"
-            )}
-          >
-            <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
-              <div>
-                <div className="text-lg font-semibold">BOB</div>
-                <p className="text-xs text-muted-foreground">BIM &amp; Operations</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMobileNavOpen(false)}
-                className="rounded-full border border-border/70 bg-background p-2 text-muted-foreground hover:border-primary hover:text-primary-foreground"
-                aria-label="Lukk meny"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            {renderNavLinks(handleNavSelection)}
-            <div className="mt-auto px-4 pb-4">
-              <div className="rounded-lg border border-border/70 bg-muted px-3 py-2">
-                <p className="text-xs text-muted-foreground">Prosjekt</p>
-                <p className="text-sm font-medium">Velg i headeren</p>
-              </div>
-            </div>
-          </aside>
-        </div>
-      )}
-
       <div className="md:ml-64">
         <main className="flex-1 relative">
           {isTouchView && (
-            <div className="absolute left-4 top-4 z-20 md:hidden">
-              <button
-                type="button"
-                onClick={() => setMobileNavOpen(true)}
-                className="flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-4 py-2 text-sm font-medium text-foreground backdrop-blur"
-              >
-                <Menu className="h-4 w-4" />
-                Meny
-              </button>
-            </div>
+            <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+              <div className="absolute left-4 top-4 z-20 md:hidden">
+                <SheetTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-4 py-2 text-sm font-medium text-foreground backdrop-blur"
+                  >
+                    <Menu className="h-4 w-4" />
+                    Meny
+                  </button>
+                </SheetTrigger>
+              </div>
+              <SheetContent side="left" className="px-0">
+                <SheetHeader className="border-b border-border/70 px-5 py-4">
+                  <div>
+                    <div className="text-lg font-semibold">BOB</div>
+                    <p className="text-xs text-muted-foreground">BIM &amp; Operations</p>
+                  </div>
+                </SheetHeader>
+                {renderNavLinks(handleNavSelection)}
+                <SheetFooter>
+                  <div className="rounded-lg border border-border/70 bg-muted px-3 py-2">
+                    <p className="text-xs text-muted-foreground">Prosjekt</p>
+                    <p className="text-sm font-medium">Velg i headeren</p>
+                  </div>
+                </SheetFooter>
+              </SheetContent>
+            </Sheet>
           )}
           <div className="max-w-7xl mx-auto px-6 py-6">{children}</div>
         </main>
