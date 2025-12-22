@@ -142,25 +142,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="hidden md:flex">
-        <aside className="w-64 border-r border-border/70 bg-card flex flex-col">
-          <div className="px-5 py-4 border-b border-border/70">
-            <div className="text-lg font-semibold">BOB</div>
-            <p className="text-xs text-muted-foreground mt-1">BIM &amp; Operations</p>
+    <div className="min-h-screen bg-background text-foreground md:flex">
+      <aside className="hidden md:flex w-64 border-r border-border/70 bg-card flex-col">
+        <div className="px-5 py-4 border-b border-border/70">
+          <div className="text-lg font-semibold">BOB</div>
+          <p className="text-xs text-muted-foreground mt-1">BIM &amp; Operations</p>
+        </div>
+        {renderNavLinks()}
+        <div className="px-4 pb-4">
+          <div className="rounded-lg border border-border/70 bg-muted px-3 py-2">
+            <p className="text-xs text-muted-foreground">Prosjekt</p>
+            <p className="text-sm font-medium">Velg i headeren</p>
           </div>
-          {renderNavLinks()}
-          <div className="px-4 pb-4">
-            <div className="rounded-lg border border-border/70 bg-muted px-3 py-2">
-              <p className="text-xs text-muted-foreground">Prosjekt</p>
-              <p className="text-sm font-medium">Velg i headeren</p>
-            </div>
-          </div>
-        </aside>
-      </div>
+        </div>
+      </aside>
 
-      <div className="md:ml-64">
-        <main className="flex-1 relative">
+      <div className="flex-1">
+        <main className="relative">
           {isTouchView && (
             <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
               <div className="absolute left-4 top-4 z-20 md:hidden">
