@@ -96,6 +96,25 @@ const rankQuantityName = (name: string, kind: "area" | "length" | "volume"): num
   return 0;
 };
 
+const getDisplayElementType = (ifcType: string): string => {
+  const map: Record<string, string> = {
+    IFCFURNISHINGELEMENT: "Fixed Furnishings",
+    IFCSLAB: "Floor Slabs",
+    IFCWALL: "Walls",
+    IFCWALLSTANDARDCASE: "Walls",
+    IFCROOF: "Roof",
+    IFCBEAM: "Beams",
+    IFCCOLUMN: "Columns",
+    IFCCOVERING: "Coverings",
+    IFCRAILING: "Railings",
+    IFCDOOR: "Doors",
+    IFCWINDOW: "Windows",
+    IFCSPACE: "Spaces",
+    IFCBUILDINGELEMENTPROXY: "Building Element Proxy",
+  };
+  return map[ifcType] || ifcType;
+};
+
 const extractMaterialsFromText = (text: string): string[] => {
   const matches: string[] = [];
   const regexes = [
@@ -471,6 +490,8 @@ export async function parseIfcFile(file: File): Promise<IFCParsedData> {
         } else {
           elementType = "Walls";
         }
+      } else {
+        elementType = getDisplayElementType(elementTypeRaw);
       }
       const elementLine = api.GetLine(modelId, elementId);
       const typeName =
