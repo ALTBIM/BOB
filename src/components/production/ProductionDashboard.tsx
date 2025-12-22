@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FileText, Download, Calculator, Building2, Image, CheckCircle, Trash2 } from "lucide-react";
 import { db, BIMModel } from "@/lib/database";
 import { getAvailableMaterialsForModel, recordModelMaterials } from "@/lib/material-store";
-import { parseIfcFile } from "@/lib/ifc-parser";
+import { parseIfcFile, IFCElementSummary } from "@/lib/ifc-parser";
 import { IfcViewerPanel } from "./IfcViewerPanel";
 import { listIfcFiles } from "@/lib/storage";
 import { ProjectFiles } from "@/components/files/ProjectFiles";
@@ -80,6 +80,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   const [files, setFiles] = useState<ModelFile[]>([]);
   const [existingFiles, setExistingFiles] = useState<ModelFile[]>([]);
   const [supabaseFiles, setSupabaseFiles] = useState<ModelFile[]>([]);
+  const [elementSummary, setElementSummary] = useState<IFCElementSummary[]>([]);
   const [isDrawingExporting, setIsDrawingExporting] = useState(false);
   const [banner, setBanner] = useState<{ type: "info" | "error"; text: string } | null>(null);
   const [supabaseDiagnostics, setSupabaseDiagnostics] = useState<{
@@ -115,6 +116,32 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       setSelectedMaterials([]);
     }
   }, [selectedProject, selectedModel, existingFiles]);
+
+  useEffect(() => {
+    const loadMetadata = async () => {
+      if (!selectedProject || !selectedModel) {
+        setElementSummary([]);
+        return;
+      }
+      try {
+        const res = await fetch(
+          `/api/ifc/metadata?projectId=${encodeURIComponent(selectedProject)}&modelId=${encodeURIComponent(
+            selectedModel
+          )}`
+        );
+        if (!res.ok) {
+          setElementSummary([]);
+          return;
+        }
+        const data = await res.json();
+        setElementSummary((data?.metadata?.elementSummary as IFCElementSummary[]) || []);
+      } catch (err) {
+        console.warn("Kunne ikke hente IFC-metadata", err);
+        setElementSummary([]);
+      }
+    };
+    loadMetadata();
+  }, [selectedProject, selectedModel]);
 
   // Fetch real IFC quantities when model changes
   useEffect(() => {
@@ -740,55 +767,52 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                 </div>
               )}
 
-              {selectedModel && quantities[selectedModel] && (
+              {selectedModel && elementSummary.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">IFC-mengder (fra BaseQuantities)</CardTitle>
-                    <CardDescription>Antall, areal og volum der IFC-en har IfcElementQuantity.</CardDescription>
+                    <CardTitle className="text-lg">Elementoversikt (IFC)</CardTitle>
+                    <CardDescription>Bygningselementer med type, antall, areal, lengde og volum.</CardDescription>
                   </CardHeader>
                   <CardContent className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
   <tr className="border-b">
+    <th className="text-left p-2">Elementtype</th>
     <th className="text-left p-2">Type</th>
-    <th className="text-left p-2">Antall</th>
     <th className="text-left p-2">Areal (m2)</th>
     <th className="text-left p-2">Lengde (m)</th>
     <th className="text-left p-2">Volum (m3)</th>
+    <th className="text-left p-2">Antall</th>
   </tr>
 </thead>
                       <tbody>
-                        {[
-                          "IFCWALLSTANDARDCASE",
-                          "IFCWALL",
-                          "IFCSLAB",
-                          "IFCROOF",
-                          "IFCBEAM",
-                          "IFCCOLUMN",
-                          "IFCCOVERING",
-                          "IFCRAILING",
-                          "IFCSPACE",
-                          "IFCDOOR",
-                          "IFCWINDOW",
-                        ].map(
-                          (typeKey) => (
-                            <tr key={typeKey} className="border-b hover:bg-muted/40">
-                              <td className="p-2">{typeKey}</td>
-                              <td className="p-2 font-mono">{quantities[selectedModel]?.counts?.[typeKey] ?? 0}</td>
-                              <td className="p-2 font-mono">
-                                {formatQuantityNumber(quantities[selectedModel]?.areas?.[typeKey])}
-                              </td>
-                              <td className="p-2 font-mono">
-                                {formatQuantityNumber(quantities[selectedModel]?.lengths?.[typeKey])}
-                              </td>
-                              <td className="p-2 font-mono">
-                                {formatQuantityNumber(quantities[selectedModel]?.volumes?.[typeKey])}
-                              </td>
-                            </tr>
-                          )
-                        )}
+                        {elementSummary.map((entry) => (
+                          <tr key={`${entry.elementType}-${entry.typeName}`} className="border-b hover:bg-muted/40">
+                            <td className="p-2">{entry.elementType}</td>
+                            <td className="p-2">{entry.typeName}</td>
+                            <td className="p-2 font-mono">{formatQuantityNumber(entry.netArea)}</td>
+                            <td className="p-2 font-mono">{formatQuantityNumber(entry.length)}</td>
+                            <td className="p-2 font-mono">{formatQuantityNumber(entry.volume)}</td>
+                            <td className="p-2 font-mono">{entry.count}</td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
+                  </CardContent>
+                </Card>
+              )}
+
+              {selectedModel && elementSummary.length === 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Elementoversikt (IFC)</CardTitle>
+                    <CardDescription>Ingen elementoversikt funnet for denne modellen.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-slate-600">
+                      Last opp modellen p\u00e5 nytt for \u00e5 lagre elementdata, eller kontroller at filen har
+                      Pset_WallCommon og IfcElementQuantity.
+                    </p>
                   </CardContent>
                 </Card>
               )}

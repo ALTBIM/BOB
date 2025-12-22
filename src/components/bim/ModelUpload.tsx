@@ -176,6 +176,19 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
       });
 
       await persistModelToStore(updated, materials);
+      fetch("/api/ifc/metadata", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: updated.projectId,
+          modelId: updated.modelId || updated.id,
+          name: updated.name,
+          materials,
+          objects: updated.objects,
+          zones: updated.zones,
+          elementSummary: updated.elementSummary || [],
+        }),
+      }).catch((err) => console.error("Kunne ikke lagre IFC-metadata", err));
     } catch (error) {
       console.error("Kunne ikke lese IFC", error);
       setFiles((prev) =>

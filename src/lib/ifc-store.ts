@@ -9,6 +9,14 @@ type IfcMetadata = {
   materials: string[];
   objects?: number;
   zones?: number;
+  elementSummary?: {
+    elementType: string;
+    typeName: string;
+    count: number;
+    netArea: number;
+    length: number;
+    volume: number;
+  }[];
   createdAt?: string;
 };
 
@@ -43,9 +51,11 @@ async function getDb(): Promise<Pool | null> {
         materials TEXT[],
         objects INTEGER,
         zones INTEGER,
+        element_summary JSONB,
         created_at TIMESTAMPTZ DEFAULT now()
       );
     `);
+    await dbPool.query(`ALTER TABLE ifc_metadata ADD COLUMN IF NOT EXISTS element_summary JSONB;`);
     dbReady = true;
     return dbPool;
   } catch (err) {
@@ -66,8 +76,9 @@ async function loadAll(): Promise<IfcMetadata[]> {
         materials: string[] | null;
         objects: number | null;
         zones: number | null;
+        element_summary: unknown | null;
         created_at: string;
-      }>("SELECT model_id, project_id, name, materials, objects, zones, created_at FROM ifc_metadata");
+      }>("SELECT model_id, project_id, name, materials, objects, zones, element_summary, created_at FROM ifc_metadata");
       return res.rows.map((row) => ({
         modelId: row.model_id,
         projectId: row.project_id,
@@ -75,6 +86,7 @@ async function loadAll(): Promise<IfcMetadata[]> {
         materials: row.materials || [],
         objects: row.objects || undefined,
         zones: row.zones || undefined,
+        elementSummary: (row.element_summary as IfcMetadata["elementSummary"]) || [],
         createdAt: row.created_at,
       }));
     } catch (err) {
@@ -104,16 +116,25 @@ async function persistAll(data: IfcMetadata[]) {
       for (const row of data) {
         await client.query(
           `
-            INSERT INTO ifc_metadata (model_id, project_id, name, materials, objects, zones)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO ifc_metadata (model_id, project_id, name, materials, objects, zones, element_summary)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (model_id) DO UPDATE SET
               project_id = excluded.project_id,
               name = excluded.name,
               materials = excluded.materials,
               objects = excluded.objects,
-              zones = excluded.zones;
+              zones = excluded.zones,
+              element_summary = excluded.element_summary;
           `,
-          [row.modelId, row.projectId, row.name || null, row.materials, row.objects || null, row.zones || null]
+          [
+            row.modelId,
+            row.projectId,
+            row.name || null,
+            row.materials,
+            row.objects || null,
+            row.zones || null,
+            row.elementSummary || [],
+          ]
         );
       }
       await client.query("COMMIT");
