@@ -212,6 +212,22 @@ export async function parseIfcFile(file: File): Promise<IFCParsedData> {
       });
     }
 
+    objectIds.forEach((elementId) => {
+      try {
+        const elementLine: any = api.GetLine(modelId, elementId, false, true, "HasAssociations");
+        const associations = toArray(elementLine?.HasAssociations).map(getRefId).filter(Boolean) as number[];
+        associations.forEach((assocId) => {
+          const assocLine: any = api.GetLine(modelId, assocId);
+          if (!assocLine) return;
+          const assocType = api.GetNameFromTypeCode(api.GetLineType(modelId, assocId));
+          if (assocType !== "IFCRELASSOCIATESMATERIAL") return;
+          collectMaterialRef(assocLine?.RelatingMaterial);
+        });
+      } catch {
+        // ignore per-element errors
+      }
+    });
+
     if (materialMap.size === 0) {
       const materialTypes = [
         (ifc as any).IFCMATERIAL,
