@@ -133,28 +133,105 @@ export async function parseIfcFile(file: File): Promise<IFCParsedData> {
       return ids;
     };
 
-    const materials: string[] = [];
-    const materialTypes = [
-      (ifc as any).IFCMATERIAL,
-      (ifc as any).IFCMATERIALLAYER,
-      (ifc as any).IFCMATERIALLIST,
-    ];
+    const materialMap = new Map<string, string>();
+    const addMaterialName = (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const key = trimmed.toLowerCase();
+      if (!materialMap.has(key)) materialMap.set(key, trimmed);
+    };
 
-    materialTypes.forEach((type) => {
-      if (!type) return;
-      try {
-        const ids = collectIds(type, true);
-        ids.forEach((id) => {
-          const line: any = api.GetLine(modelId, id);
-          const name = getTextValue(line?.Name);
-          if (name.trim()) {
-            materials.push(name.toLowerCase());
-          }
-        });
-      } catch {
-        // ignore per-type errors
+    const collectMaterialRef = (materialRef: any) => {
+      const materialId = getRefId(materialRef);
+      if (!materialId) return;
+      const materialLine: any = api.GetLine(modelId, materialId);
+      if (!materialLine) return;
+      const typeName = api.GetNameFromTypeCode(api.GetLineType(modelId, materialId));
+
+      switch (typeName) {
+        case "IFCMATERIAL": {
+          addMaterialName(getTextValue(materialLine?.Name));
+          break;
+        }
+        case "IFCMATERIALLAYER": {
+          collectMaterialRef(materialLine?.Material);
+          addMaterialName(getTextValue(materialLine?.Name));
+          break;
+        }
+        case "IFCMATERIALLAYERSET": {
+          toArray(materialLine?.MaterialLayers).forEach((layer) => collectMaterialRef(layer));
+          break;
+        }
+        case "IFCMATERIALLAYERSETUSAGE": {
+          collectMaterialRef(materialLine?.ForLayerSet);
+          break;
+        }
+        case "IFCMATERIALCONSTITUENTSET": {
+          toArray(materialLine?.MaterialConstituents).forEach((constituent) => collectMaterialRef(constituent));
+          break;
+        }
+        case "IFCMATERIALCONSTITUENT": {
+          collectMaterialRef(materialLine?.Material);
+          addMaterialName(getTextValue(materialLine?.Name));
+          break;
+        }
+        case "IFCMATERIALLIST": {
+          toArray(materialLine?.Materials).forEach((mat) => collectMaterialRef(mat));
+          break;
+        }
+        case "IFCMATERIALPROFILESET": {
+          toArray(materialLine?.MaterialProfiles).forEach((profile) => collectMaterialRef(profile));
+          break;
+        }
+        case "IFCMATERIALPROFILESETUSAGE": {
+          collectMaterialRef(materialLine?.ForProfileSet);
+          break;
+        }
+        case "IFCMATERIALPROFILE": {
+          collectMaterialRef(materialLine?.Material);
+          addMaterialName(getTextValue(materialLine?.Name));
+          break;
+        }
+        default: {
+          addMaterialName(getTextValue(materialLine?.Name));
+          break;
+        }
       }
-    });
+    };
+
+    const relMatCode = (ifc as any).IFCRELASSOCIATESMATERIAL;
+    if (relMatCode) {
+      const relMatIds = collectIds(relMatCode, false);
+      relMatIds.forEach((relId) => {
+        try {
+          const relLine: any = api.GetLine(modelId, relId);
+          collectMaterialRef(relLine?.RelatingMaterial);
+        } catch {
+          // ignore relation errors
+        }
+      });
+    }
+
+    if (materialMap.size === 0) {
+      const materialTypes = [
+        (ifc as any).IFCMATERIAL,
+        (ifc as any).IFCMATERIALLAYER,
+        (ifc as any).IFCMATERIALLIST,
+      ];
+
+      materialTypes.forEach((type) => {
+        if (!type) return;
+        try {
+          const ids = collectIds(type, true);
+          ids.forEach((id) => {
+            const line: any = api.GetLine(modelId, id);
+            addMaterialName(getTextValue(line?.Name));
+          });
+        } catch {
+          // ignore per-type errors
+        }
+      });
+    }
 
     const elementTypeCode = (ifc as any).IFCELEMENT;
     const objectIds: number[] = elementTypeCode ? collectIds(elementTypeCode, true) : [];
@@ -302,7 +379,7 @@ export async function parseIfcFile(file: File): Promise<IFCParsedData> {
 
     api.CloseModel(modelId);
 
-    const uniqueMaterials = Array.from(new Set(materials)).filter(Boolean);
+    const uniqueMaterials = Array.from(materialMap.values()).filter(Boolean);
     return {
       materials: uniqueMaterials,
       objectCount: objectIds.length,
