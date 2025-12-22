@@ -65,6 +65,16 @@ const getNumberValue = (value: any): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const getBooleanValue = (value: any): boolean | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "object" && "value" in value) return getBooleanValue((value as any).value);
+  const text = String(value).trim().toLowerCase();
+  if (["true", "t", "yes", "y", "1"].includes(text)) return true;
+  if (["false", "f", "no", "n", "0"].includes(text)) return false;
+  return null;
+};
+
 const rankQuantityName = (name: string, kind: "area" | "length" | "volume"): number => {
   const key = name.replace(/\s+/g, "").toLowerCase();
   if (!key) return 0;
@@ -345,6 +355,7 @@ export async function parseIfcFile(file: File): Promise<IFCParsedData> {
       });
     }
 
+    const psetWallCommonByElement = new Map<number, { reference?: string; isExternal?: boolean }>();
     const quantitiesByElement = new Map<
       number,
       { area: number; length: number; volume: number; areaRank: number; lengthRank: number; volumeRank: number }
@@ -359,61 +370,88 @@ export async function parseIfcFile(file: File): Promise<IFCParsedData> {
           const propDefId = getRefId(propDefRef);
           if (!propDefId) return;
           const propTypeName = api.GetNameFromTypeCode(api.GetLineType(modelId, propDefId));
-          if (propTypeName !== "IFCELEMENTQUANTITY") return;
           const propDef = api.GetLine(modelId, propDefId);
-          const quantities = toArray((propDef as any)?.Quantities).map(getRefId).filter(Boolean) as number[];
-          if (quantities.length === 0) return;
           const related = toArray((rel as any)?.RelatedObjects).map(getRefId).filter(Boolean) as number[];
-          related.forEach((elementId) => {
-            const entry =
-              quantitiesByElement.get(elementId) || {
-                area: 0,
-                length: 0,
-                volume: 0,
-                areaRank: 0,
-                lengthRank: 0,
-                volumeRank: 0,
-              };
-            quantities.forEach((qId) => {
-              const qLine = api.GetLine(modelId, qId);
-              if (!qLine) return;
-              const qName = getTextValue((qLine as any)?.Name);
 
-              const areaVal = getNumberValue((qLine as any)?.AreaValue);
-              if (areaVal !== null) {
-                const rank = rankQuantityName(qName, "area");
-                if (rank > entry.areaRank) {
-                  entry.area = areaVal;
-                  entry.areaRank = rank;
-                } else if (rank === entry.areaRank && rank > 0) {
-                  entry.area += areaVal;
+          if (propTypeName === "IFCELEMENTQUANTITY") {
+            const quantities = toArray((propDef as any)?.Quantities).map(getRefId).filter(Boolean) as number[];
+            if (quantities.length === 0) return;
+            related.forEach((elementId) => {
+              const entry =
+                quantitiesByElement.get(elementId) || {
+                  area: 0,
+                  length: 0,
+                  volume: 0,
+                  areaRank: 0,
+                  lengthRank: 0,
+                  volumeRank: 0,
+                };
+              quantities.forEach((qId) => {
+                const qLine = api.GetLine(modelId, qId);
+                if (!qLine) return;
+                const qName = getTextValue((qLine as any)?.Name);
+
+                const areaVal = getNumberValue((qLine as any)?.AreaValue);
+                if (areaVal !== null) {
+                  const rank = rankQuantityName(qName, "area");
+                  if (rank > entry.areaRank) {
+                    entry.area = areaVal;
+                    entry.areaRank = rank;
+                  } else if (rank === entry.areaRank && rank > 0) {
+                    entry.area += areaVal;
+                  }
                 }
+
+                const lengthVal = getNumberValue((qLine as any)?.LengthValue);
+                if (lengthVal !== null) {
+                  const rank = rankQuantityName(qName, "length");
+                  if (rank > entry.lengthRank) {
+                    entry.length = lengthVal;
+                    entry.lengthRank = rank;
+                  } else if (rank === entry.lengthRank && rank > 0) {
+                    entry.length += lengthVal;
+                  }
+                }
+
+                const volumeVal = getNumberValue((qLine as any)?.VolumeValue);
+                if (volumeVal !== null) {
+                  const rank = rankQuantityName(qName, "volume");
+                  if (rank > entry.volumeRank) {
+                    entry.volume = volumeVal;
+                    entry.volumeRank = rank;
+                  } else if (rank === entry.volumeRank && rank > 0) {
+                    entry.volume += volumeVal;
+                  }
+                }
+              });
+              quantitiesByElement.set(elementId, entry);
+            });
+          }
+
+          if (propTypeName === "IFCPROPERTYSET") {
+            const psetName = getTextValue((propDef as any)?.Name);
+            if (psetName !== "Pset_WallCommon") return;
+            const props = toArray((propDef as any)?.HasProperties).map(getRefId).filter(Boolean) as number[];
+            let reference: string | undefined;
+            let isExternal: boolean | undefined;
+            props.forEach((propId) => {
+              const propLine = api.GetLine(modelId, propId);
+              const propName = getTextValue((propLine as any)?.Name).toLowerCase();
+              if (propName === "reference") {
+                reference = getTextValue((propLine as any)?.NominalValue);
               }
-
-              const lengthVal = getNumberValue((qLine as any)?.LengthValue);
-              if (lengthVal !== null) {
-                const rank = rankQuantityName(qName, "length");
-                if (rank > entry.lengthRank) {
-                  entry.length = lengthVal;
-                  entry.lengthRank = rank;
-                } else if (rank === entry.lengthRank && rank > 0) {
-                  entry.length += lengthVal;
-                }
-              }
-
-              const volumeVal = getNumberValue((qLine as any)?.VolumeValue);
-              if (volumeVal !== null) {
-                const rank = rankQuantityName(qName, "volume");
-                if (rank > entry.volumeRank) {
-                  entry.volume = volumeVal;
-                  entry.volumeRank = rank;
-                } else if (rank === entry.volumeRank && rank > 0) {
-                  entry.volume += volumeVal;
-                }
+              if (propName === "isexternal") {
+                const boolValue = getBooleanValue((propLine as any)?.NominalValue);
+                if (boolValue !== null) isExternal = boolValue;
               }
             });
-            quantitiesByElement.set(elementId, entry);
-          });
+            related.forEach((elementId) => {
+              const prev = psetWallCommonByElement.get(elementId) || {};
+              if (reference) prev.reference = reference;
+              if (isExternal !== undefined) prev.isExternal = isExternal;
+              psetWallCommonByElement.set(elementId, prev);
+            });
+          }
         } catch {
           // ignore relation errors
         }
@@ -422,9 +460,21 @@ export async function parseIfcFile(file: File): Promise<IFCParsedData> {
 
     const summaryMap = new Map<string, IFCElementSummary>();
     objectIds.forEach((elementId) => {
-      const elementType = elementTypeById.get(elementId) || "IFCELEMENT";
+      const elementTypeRaw = elementTypeById.get(elementId) || "IFCELEMENT";
+      const wallCommon = psetWallCommonByElement.get(elementId);
+      let elementType = elementTypeRaw;
+      if (elementTypeRaw === "IFCWALL" || elementTypeRaw === "IFCWALLSTANDARDCASE") {
+        if (wallCommon?.isExternal === true) {
+          elementType = "External Walls";
+        } else if (wallCommon?.isExternal === false) {
+          elementType = "Internal Walls";
+        } else {
+          elementType = "Walls";
+        }
+      }
       const elementLine = api.GetLine(modelId, elementId);
       const typeName =
+        wallCommon?.reference ||
         elementTypeNameById.get(elementId) ||
         getTextValue((elementLine as any)?.ObjectType) ||
         getTextValue((elementLine as any)?.Name) ||
