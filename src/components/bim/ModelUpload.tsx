@@ -22,7 +22,8 @@ import {
 } from "lucide-react";
 import { db } from "@/lib/database";
 import { recordModelMaterials } from "@/lib/material-store";
-import { listIfcFiles, uploadIfcFile, listAllFiles, uploadGenericFile } from "@/lib/storage";
+import { parseIfcFile } from "@/lib/ifc-parser";
+import { uploadIfcFile, listAllFiles, uploadGenericFile } from "@/lib/storage";
 
 interface ModelUploadProps {
   selectedProject: string | null;
@@ -133,61 +134,54 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
 
     setFiles((prev) => [...prev, ...newFiles]);
 
-    // Simulate file processing
     newFiles.forEach((file) => {
-      simulateFileProcessing(file.id);
+      void processIfcFile(file);
     });
   };
 
-  const simulateFileProcessing = (fileId: string) => {
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 15;
-
+  const processIfcFile = async (file: ModelFile) => {
+    if (!file.rawFile) {
       setFiles((prev) =>
-        prev.map((file) => {
-          if (file.id === fileId) {
-            if (progress >= 100) {
-              clearInterval(interval);
-              // Simulate processing completion
-              setTimeout(() => {
-                setFiles((prev) =>
-                  prev.map((f) => {
-                    if (f.id === fileId) {
-                      const completedFile = {
-                        ...f,
-                        status: "completed",
-                        progress: 100,
-                        objects: Math.floor(Math.random() * 5000) + 1000,
-                        zones: Math.floor(Math.random() * 50) + 10,
-                        materials: Math.floor(Math.random() * 200) + 50
-                      };
-                      const materialPool = ["betong", "stal", "tre", "aluminium", "glass", "gips", "isolasjon"];
-                      const selected = materialPool.sort(() => 0.5 - Math.random()).slice(0, 4);
-                      persistModelToStore(completedFile, selected);
-                      setExistingFiles((existing) => [...existing, completedFile]);
-                      return completedFile;
-                    }
-                    return f;
-                  })
-                );
-              }, 2000);
-
-              return {
-                ...file,
-                status: "processing",
-                progress: 100
-              };
-            }
-            return {
-              ...file,
-              progress: Math.min(progress, 100)
-            };
-          }
-          return file;
-        })
+        prev.map((f) => (f.id === file.id ? { ...f, status: "error", error: "Fant ikke IFC-fil" } : f))
       );
-    }, 200);
+      return;
+    }
+
+    setFiles((prev) =>
+      prev.map((f) => (f.id === file.id ? { ...f, status: "processing", progress: 20 } : f))
+    );
+
+    try {
+      const parsed = await parseIfcFile(file.rawFile);
+      const materials = parsed.materials || [];
+      const updated: ModelFile = {
+        ...file,
+        status: "completed",
+        progress: 100,
+        objects: parsed.objectCount,
+        zones: parsed.spaceCount,
+        materials: materials.length,
+        materialList: materials,
+      };
+
+      setFiles((prev) => prev.map((f) => (f.id === file.id ? updated : f)));
+      setExistingFiles((prev) => {
+        const exists = prev.find((f) => f.id === file.id);
+        if (exists) {
+          return prev.map((f) => (f.id === file.id ? updated : f));
+        }
+        return [...prev, updated];
+      });
+
+      await persistModelToStore(updated, materials);
+    } catch (error) {
+      console.error("Kunne ikke lese IFC", error);
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.id === file.id ? { ...f, status: "error", error: "IFC-lesing feilet", progress: 0 } : f
+        )
+      );
+    }
   };
 
   const persistModelToStore = async (file: ModelFile, materials: string[]) => {
