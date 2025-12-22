@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   MessageCircle,
@@ -50,12 +50,11 @@ const productionNav = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [filesOpen, setFilesOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const deviceType = useDeviceType();
   const isTouchView = deviceType !== "desktop";
-  const productionTab = searchParams.get("tab");
+  const [productionTab, setProductionTab] = useState<string | null>(null);
 
   const handleNavSelection = () => {
     if (isTouchView) {
@@ -78,6 +77,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (filesNav.some((item) => item.href === pathname)) {
       setFilesOpen(true);
     }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    setProductionTab(params.get("tab"));
   }, [pathname]);
 
   useEffect(() => {
