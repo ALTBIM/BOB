@@ -1,7 +1,6 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -73,7 +72,7 @@ type Quantities = {
 
 export default function ProductionDashboard({ selectedProject }: ProductionDashboardProps) {
   const [selectedModel, setSelectedModel] = useState<string>("");
-  const searchParams = useSearchParams();
+  const search = typeof window !== "undefined" ? window.location.search : "";
   const [activeTab, setActiveTab] = useState("quantities");
   const [quantities, setQuantities] = useState<Record<string, Quantities>>({});
   const [availableModels, setAvailableModels] = useState<BIMModel[]>([]);
@@ -108,13 +107,15 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   }, [selectedProject]);
 
   useEffect(() => {
-    const tab = searchParams.get("tab");
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(search);
+    const tab = params.get("tab");
     if (tab && ["quantities", "drawings", "control", "files"].includes(tab)) {
       setActiveTab(tab);
-    } else {
-      setActiveTab("quantities");
+      return;
     }
-  }, [searchParams]);
+    setActiveTab("quantities");
+  }, [search]);
 
   useEffect(() => {
     if (selectedProject && selectedModel) {
