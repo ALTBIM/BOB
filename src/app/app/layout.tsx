@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, MessageCircle, Eye, Folder, FilePlus2, Files, Box, Wrench, ShieldCheck, Users, Settings, Menu } from "lucide-react";
 import clsx from "clsx";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactElement } from "react";
 
-import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTrigger } from "@/components/ui/sheet";
 import { useDeviceType } from "@/lib/hooks/use-device-type";
 
 const primaryNav = [
@@ -68,14 +68,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [isTouchView, mobileNavOpen]);
 
-  const renderNavLinks = (onItemClick?: () => void) => (
+  const renderNavLinks = (onItemClick?: () => void, closeOnNavigate?: boolean) => (
     <nav className="flex-1 px-3 py-4 space-y-1">
       {primaryNav.map((item) => {
         const active = pathname === item.href;
         const Icon = item.icon;
-        return (
+        const linkNode: ReactElement = (
           <Link
-            key={item.href}
             href={item.href}
             onClick={onItemClick}
             className={clsx(
@@ -86,6 +85,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Icon className="h-4 w-4" />
             <span>{item.name}</span>
           </Link>
+        );
+        return closeOnNavigate ? (
+          <SheetClose key={item.href} asChild>
+            {linkNode}
+          </SheetClose>
+        ) : (
+          <Fragment key={item.href}>{linkNode}</Fragment>
         );
       })}
 
@@ -108,23 +114,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {filesNav.map((item) => {
               const active = pathname === item.href;
               const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onItemClick}
-                  className={clsx(
-                    "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
-                    active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{item.name}</span>
-                </Link>
-              );
-            })}
-          </div>
-        )}
+                const linkNode: ReactElement = (
+                  <Link
+                    href={item.href}
+                    onClick={onItemClick}
+                    className={clsx(
+                      "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
+                      active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+                return closeOnNavigate ? (
+                  <SheetClose key={item.href} asChild>
+                    {linkNode}
+                  </SheetClose>
+                ) : (
+                  <Fragment key={item.href}>{linkNode}</Fragment>
+                );
+              })}
+            </div>
+          )}
       </div>
     </nav>
   );
@@ -164,18 +176,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
               <SheetContent side="left" className="px-0">
                 <SheetHeader className="border-b border-border/70 px-5 py-4">
-                  <div>
-                    <div className="text-lg font-semibold">BOB</div>
-                    <p className="text-xs text-muted-foreground">BIM &amp; Operations</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-lg font-semibold">BOB</div>
+                      <p className="text-xs text-muted-foreground">BIM &amp; Operations</p>
+                    </div>
+                    <SheetClose asChild>
+                      <button
+                        type="button"
+                        className="rounded-full border border-border/70 bg-background p-2 text-muted-foreground hover:border-primary hover:text-primary-foreground"
+                        aria-label="Lukk meny"
+                      >
+                        X
+                      </button>
+                    </SheetClose>
                   </div>
                 </SheetHeader>
-                {renderNavLinks(handleNavSelection)}
-                <SheetFooter>
-                  <div className="rounded-lg border border-border/70 bg-muted px-3 py-2">
-                    <p className="text-xs text-muted-foreground">Prosjekt</p>
-                    <p className="text-sm font-medium">Velg i headeren</p>
-                  </div>
-                </SheetFooter>
+            {renderNavLinks(handleNavSelection, true)}
+            <SheetFooter>
+              <div className="rounded-lg border border-border/70 bg-muted px-3 py-2">
+                <p className="text-xs text-muted-foreground">Prosjekt</p>
+                <p className="text-sm font-medium">Velg i headeren</p>
+              </div>
+            </SheetFooter>
               </SheetContent>
             </Sheet>
           )}
