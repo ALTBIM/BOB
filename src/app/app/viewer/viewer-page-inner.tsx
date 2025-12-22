@@ -14,8 +14,26 @@ import { listIfcFiles } from "@/lib/storage";
 type ModelItem = {
   id: string;
   name: string;
-  url: string;
+  fileUrl: string;
+  viewerUrl: string;
   uploadedAt?: string;
+};
+
+const VIEWER_BASE_URL = process.env.NEXT_PUBLIC_IFC_VIEWER_URL || "https://viewer.altbim.no";
+
+const toSafeId = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "_");
+
+const buildViewerUrl = (projectId: string, file: { id?: string; name: string; path: string; publicUrl: string; provider?: string }) => {
+  const safeId = toSafeId(file.id || file.path || file.name);
+  const params = new URLSearchParams({
+    url: file.publicUrl,
+    name: file.name,
+    path: file.path,
+    provider: file.provider || "supabase",
+    fileId: file.id || file.path,
+    embed: "1",
+  });
+  return `${VIEWER_BASE_URL}/projects/${encodeURIComponent(projectId)}/models/${encodeURIComponent(safeId)}/viewer?${params.toString()}`;
 };
 
 export default function ViewerPageInner() {
@@ -26,7 +44,7 @@ export default function ViewerPageInner() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<string>("");
   const [models, setModels] = useState<ModelItem[]>([]);
-  const [selectedUrl, setSelectedUrl] = useState<string>("");
+  const [selectedViewerUrl, setSelectedViewerUrl] = useState<string>("");
   const [loadingModels, setLoadingModels] = useState(false);
 
   useEffect(() => {
@@ -50,29 +68,37 @@ export default function ViewerPageInner() {
     const loadModels = async () => {
       if (!projectId) {
         setModels([]);
-        setSelectedUrl("");
+        setSelectedViewerUrl("");
         return;
       }
       setLoadingModels(true);
       try {
         const storageList = await listIfcFiles(projectId);
-        const items: ModelItem[] =
+                const items: ModelItem[] =
           storageList?.map((m: any) => ({
             id: m.id || m.path,
             name: m.name || m.filename || m.path,
-            url: m.publicUrl,
+            fileUrl: m.publicUrl,
+            viewerUrl: buildViewerUrl(projectId, {
+              id: m.id || m.path,
+              name: m.name || m.filename || m.path,
+              path: m.path,
+              publicUrl: m.publicUrl,
+              provider: m.provider || "supabase",
+            }),
             uploadedAt: m.uploadedAt,
           })) || [];
         setModels(items);
         if (paramUrl) {
-          setSelectedUrl(paramUrl);
+          const match = items.find((item) => item.fileUrl === paramUrl);
+          setSelectedViewerUrl(match?.viewerUrl || items[0]?.viewerUrl || "");
         } else {
-          setSelectedUrl(items[0]?.url || "");
+          setSelectedViewerUrl(items[0]?.viewerUrl || "");
         }
       } catch (err) {
         console.warn("Kunne ikke hente modeller", err);
         setModels([]);
-        setSelectedUrl("");
+        setSelectedViewerUrl("");
       } finally {
         setLoadingModels(false);
       }
@@ -92,7 +118,7 @@ export default function ViewerPageInner() {
   if (!user) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center text-muted-foreground">
-        Logg inn for Ã¥ se viewer.
+        Logg inn for \u00e5 se viewer.
       </div>
     );
   }
@@ -105,9 +131,9 @@ export default function ViewerPageInner() {
           <p className="text-sm text-muted-foreground">Vis IFC-modeller fra prosjektet direkte i BOB.</p>
         </div>
         <Button variant="outline" size="sm" asChild>
-          <a href="https://viewer.altbim.no" target="_blank" rel="noreferrer">
+          <a href={selectedViewerUrl || VIEWER_BASE_URL} target="_blank" rel="noreferrer">
             <Eye className="w-4 h-4 mr-2" />
-            Ã…pne i nytt vindu
+            \u00c5pne i nytt vindu
           </a>
         </Button>
       </div>
@@ -141,13 +167,13 @@ export default function ViewerPageInner() {
                   <Loader2 className="w-4 h-4 animate-spin mr-2" /> Laster modeller...
                 </div>
               ) : (
-                <Select value={selectedUrl} onValueChange={setSelectedUrl} disabled={models.length === 0}>
+                <Select value={selectedViewerUrl} onValueChange={setSelectedViewerUrl} disabled={models.length === 0}>
                   <SelectTrigger>
                     <SelectValue placeholder={models.length ? "Velg IFC..." : "Ingen IFC funnet"} />
                   </SelectTrigger>
                   <SelectContent>
                     {models.map((m) => (
-                      <SelectItem key={m.id} value={m.url}>
+                      <SelectItem key={m.id} value={m.viewerUrl}>
                         {m.name}
                       </SelectItem>
                     ))}
@@ -157,16 +183,16 @@ export default function ViewerPageInner() {
             </div>
           </div>
 
-          {selectedUrl ? (
+          {selectedViewerUrl ? (
             <div className="border rounded-lg overflow-hidden h-[75vh]">
               <iframe
-                src={`https://viewer.altbim.no/?url=${encodeURIComponent(selectedUrl)}&embed=1`}
+                src={selectedViewerUrl}
                 title="IFC Viewer"
                 className="w-full h-full"
               />
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Velg en IFC-fil for Ã¥ vise modellen.</p>
+            <p className="text-sm text-muted-foreground">Velg en IFC-fil for \u00e5 vise modellen.</p>
           )}
         </CardContent>
       </Card>
