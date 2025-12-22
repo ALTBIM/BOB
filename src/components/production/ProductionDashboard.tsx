@@ -86,6 +86,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   const [supabaseFiles, setSupabaseFiles] = useState<ModelFile[]>([]);
   const [elementSummary, setElementSummary] = useState<IFCElementSummary[]>([]);
   const [metadataMaterials, setMetadataMaterials] = useState<string[]>([]);
+  const [metadataStatus, setMetadataStatus] = useState<Record<string, "idle" | "loading" | "error">>({});
   const [isDrawingExporting, setIsDrawingExporting] = useState(false);
   const [banner, setBanner] = useState<{ type: "info" | "error"; text: string } | null>(null);
   const [supabaseDiagnostics, setSupabaseDiagnostics] = useState<{
@@ -148,11 +149,45 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         );
         if (!res.ok) {
           setElementSummary([]);
+          setMetadataMaterials([]);
+          const file = existingFiles.find((f) => f.id === selectedModel);
+          const fileUrl = file?.storageUrl || file?.fileUrl;
+          if ((res.status === 404 || res.status === 400) && fileUrl && metadataStatus[selectedModel] !== "loading") {
+            setMetadataStatus((prev) => ({ ...prev, [selectedModel]: "loading" }));
+            try {
+              const fileRes = await fetch(fileUrl);
+              if (!fileRes.ok) throw new Error(`Kunne ikke hente IFC (${fileRes.status})`);
+              const blob = await fileRes.blob();
+              const fileName = file?.name || "model.ifc";
+              const parsedFile = new File([blob], fileName, { type: blob.type || "application/octet-stream" });
+              const parsed = await parseIfcFile(parsedFile);
+              await fetch("/api/ifc/metadata", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  projectId: selectedProject,
+                  modelId: selectedModel,
+                  name: fileName,
+                  materials: parsed.materials || [],
+                  objects: parsed.objectCount ?? 0,
+                  zones: parsed.spaceCount ?? 0,
+                  elementSummary: parsed.elementSummary || [],
+                }),
+              });
+              setElementSummary(parsed.elementSummary || []);
+              setMetadataMaterials(parsed.materials || []);
+              setMetadataStatus((prev) => ({ ...prev, [selectedModel]: "idle" }));
+            } catch (err) {
+              console.warn("Kunne ikke hente IFC-data for metadata", err);
+              setMetadataStatus((prev) => ({ ...prev, [selectedModel]: "error" }));
+            }
+          }
           return;
         }
         const data = await res.json();
         setElementSummary((data?.metadata?.elementSummary as IFCElementSummary[]) || []);
         setMetadataMaterials((data?.metadata?.materials as string[]) || []);
+        setMetadataStatus((prev) => ({ ...prev, [selectedModel]: "idle" }));
       } catch (err) {
         console.warn("Kunne ikke hente IFC-metadata", err);
         setElementSummary([]);
@@ -160,7 +195,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       }
     };
     loadMetadata();
-  }, [selectedProject, selectedModel]);
+  }, [selectedProject, selectedModel, existingFiles, metadataStatus]);
 
   // Fetch real IFC quantities when model changes
   useEffect(() => {
@@ -459,6 +494,8 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     return existingFiles.filter((file) => (selectedProject ? file.projectId === selectedProject : true));
   };
 
+  const metadataState = selectedModel ? metadataStatus[selectedModel] : undefined;
+
   const generateQuantityList = async (
     type: "quantities" | "drawings" | "control",
     materialsOverride?: string[]
@@ -747,8 +784,12 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                     <CardContent className="space-y-3">
                       {availableMaterials.length === 0 && (
                         <p className="text-sm text-slate-600">
-                          Ingen materialer ble funnet. Du kan prøve "Fullt uttrekk" (bruker fallback).
-                        </p>
+  {metadataState === "loading"
+    ? "Henter materialer fra lagret IFC-fil..."
+    : metadataState === "error"
+      ? "Klarte ikke hente materialer fra lagret fil. Pr\u00f8v \u00e5 laste opp p\u00e5 nytt."
+      : "Ingen materialer ble funnet. Du kan pr\u00f8ve \"Fullt uttrekk\" (bruker fallback)."}
+</p>
                       )}
 
                       {availableMaterials.length > 0 && (
@@ -831,9 +872,12 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-slate-600">
-                      Last opp modellen p\u00e5 nytt for \u00e5 lagre elementdata, eller kontroller at filen har
-                      Pset_WallCommon og IfcElementQuantity.
-                    </p>
+  {metadataState === "loading"
+    ? "Henter metadata fra lagret IFC-fil..."
+    : metadataState === "error"
+      ? "Klarte ikke hente metadata fra lagret fil. Pr\u00f8v \u00e5 laste opp p\u00e5 nytt."
+      : "Last opp modellen p\u00e5 nytt for \u00e5 lagre elementdata, eller kontroller at filen har Pset_WallCommon og IfcElementQuantity."}
+</p>
                   </CardContent>
                 </Card>
               )}
@@ -1073,6 +1117,10 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     </div>
   );
 }
+
+
+
+
 
 
 
