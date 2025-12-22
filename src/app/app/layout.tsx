@@ -1,8 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageCircle, Eye, Folder, FilePlus2, Files, Box, Wrench, ShieldCheck, Users, Settings, Menu } from "lucide-react";
+import { usePathname, useSearchParams } from "next/navigation";
+import {
+  LayoutDashboard,
+  MessageCircle,
+  Eye,
+  Folder,
+  FilePlus2,
+  Files,
+  Box,
+  Wrench,
+  ShieldCheck,
+  Users,
+  Settings,
+  Menu,
+  FileText,
+  Image,
+} from "lucide-react";
 import clsx from "clsx";
 import { Fragment, useEffect, useState, type ReactElement } from "react";
 
@@ -26,12 +41,21 @@ const filesNav = [
   { name: "Modeller", href: "/app/files/models", icon: Box },
 ];
 
+const productionNav = [
+  { name: "Mengdelister", href: "/app/production?tab=quantities", icon: FileText, tab: "quantities" },
+  { name: "Tegningsproduksjon", href: "/app/production?tab=drawings", icon: Image, tab: "drawings" },
+  { name: "IFC Kontroll", href: "/app/production?tab=control", icon: ShieldCheck, tab: "control" },
+  { name: "Dokumenter", href: "/app/production?tab=files", icon: Files, tab: "files" },
+];
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [filesOpen, setFilesOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const deviceType = useDeviceType();
   const isTouchView = deviceType !== "desktop";
+  const productionTab = searchParams.get("tab");
 
   const handleNavSelection = () => {
     if (isTouchView) {
@@ -86,12 +110,46 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <span>{item.name}</span>
           </Link>
         );
-        return closeOnNavigate ? (
+        const node = closeOnNavigate ? (
           <SheetClose key={item.href} asChild>
             {linkNode}
           </SheetClose>
         ) : (
           <Fragment key={item.href}>{linkNode}</Fragment>
+        );
+
+        if (item.name !== "Produksjon") return node;
+
+        return (
+          <Fragment key={item.href}>
+            {node}
+            <div className="mt-1 ml-3 space-y-1">
+              {productionNav.map((child) => {
+                const childActive = pathname === "/app/production" && productionTab === child.tab;
+                const ChildIcon = child.icon;
+                const childLink: ReactElement = (
+                  <Link
+                    href={child.href}
+                    onClick={onItemClick}
+                    className={clsx(
+                      "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
+                      childActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    <ChildIcon className="h-4 w-4" />
+                    <span>{child.name}</span>
+                  </Link>
+                );
+                return closeOnNavigate ? (
+                  <SheetClose key={child.href} asChild>
+                    {childLink}
+                  </SheetClose>
+                ) : (
+                  <Fragment key={child.href}>{childLink}</Fragment>
+                );
+              })}
+            </div>
+          </Fragment>
         );
       })}
 

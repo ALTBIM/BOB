@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +61,7 @@ interface ModelFile {
   storageUrl?: string;
   provider?: string;
   path?: string;
+  elementSummary?: IFCElementSummary[];
 }
 
 type Quantities = {
@@ -71,6 +73,8 @@ type Quantities = {
 
 export default function ProductionDashboard({ selectedProject }: ProductionDashboardProps) {
   const [selectedModel, setSelectedModel] = useState<string>("");
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState("quantities");
   const [quantities, setQuantities] = useState<Record<string, Quantities>>({});
   const [availableModels, setAvailableModels] = useState<BIMModel[]>([]);
   const [availableMaterials, setAvailableMaterials] = useState<string[]>([]);
@@ -81,6 +85,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   const [existingFiles, setExistingFiles] = useState<ModelFile[]>([]);
   const [supabaseFiles, setSupabaseFiles] = useState<ModelFile[]>([]);
   const [elementSummary, setElementSummary] = useState<IFCElementSummary[]>([]);
+  const [metadataMaterials, setMetadataMaterials] = useState<string[]>([]);
   const [isDrawingExporting, setIsDrawingExporting] = useState(false);
   const [banner, setBanner] = useState<{ type: "info" | "error"; text: string } | null>(null);
   const [supabaseDiagnostics, setSupabaseDiagnostics] = useState<{
@@ -102,25 +107,37 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   }, [selectedProject]);
 
   useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab && ["quantities", "drawings", "control", "files"].includes(tab)) {
+      setActiveTab(tab);
+    } else {
+      setActiveTab("quantities");
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     if (selectedProject && selectedModel) {
-      // try local parsed data first
+      // try metadata first, then local parsed data
       const localFile = existingFiles.find((f) => f.id === selectedModel && f.projectId === selectedProject);
       const materials =
-        (localFile?.materialList && localFile.materialList.length > 0
-          ? localFile.materialList
-          : getAvailableMaterialsForModel(selectedProject, selectedModel)) || [];
+        metadataMaterials.length > 0
+          ? metadataMaterials
+          : (localFile?.materialList && localFile.materialList.length > 0
+              ? localFile.materialList
+              : getAvailableMaterialsForModel(selectedProject, selectedModel)) || [];
       setAvailableMaterials(materials);
       setSelectedMaterials([]);
     } else {
       setAvailableMaterials([]);
       setSelectedMaterials([]);
     }
-  }, [selectedProject, selectedModel, existingFiles]);
+  }, [selectedProject, selectedModel, existingFiles, metadataMaterials]);
 
   useEffect(() => {
     const loadMetadata = async () => {
       if (!selectedProject || !selectedModel) {
         setElementSummary([]);
+        setMetadataMaterials([]);
         return;
       }
       try {
@@ -135,9 +152,11 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         }
         const data = await res.json();
         setElementSummary((data?.metadata?.elementSummary as IFCElementSummary[]) || []);
+        setMetadataMaterials((data?.metadata?.materials as string[]) || []);
       } catch (err) {
         console.warn("Kunne ikke hente IFC-metadata", err);
         setElementSummary([]);
+        setMetadataMaterials([]);
       }
     };
     loadMetadata();
@@ -301,6 +320,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                       zones: parsed.spaceCount ?? pf.zones ?? 0,
                       materials: materials.length,
                       materialList: materials,
+                      elementSummary: parsed.elementSummary || [],
                       storageUrl: pf.storageUrl || pf.fileUrl,
                     };
                     persistModelToStore(completedFile, materials);
@@ -383,6 +403,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
           materials,
           objects: file.objects,
           zones: file.zones,
+          elementSummary: file.elementSummary || [],
         }),
       }).catch((err) => console.error("Kunne ikke lagre IFC-metadata", err));
     } catch (error) {
@@ -660,7 +681,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
           {banner.text}
         </div>
       )}
-      <Tabs defaultValue="quantities" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="quantities">Mengdelister</TabsTrigger>
           <TabsTrigger value="drawings">Tegningsproduksjon</TabsTrigger>
