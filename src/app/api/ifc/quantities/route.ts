@@ -73,9 +73,11 @@ export async function POST(request: Request) {
     // Map element expressID -> type name for quick lookup
     const elementTypeById = new Map<number, string>();
     const areas: Record<string, number> = {};
+    const lengths: Record<string, number> = {};
     const volumes: Record<string, number> = {};
     TYPES.forEach((t) => {
       areas[t] = 0;
+      lengths[t] = 0;
       volumes[t] = 0;
     });
 
@@ -124,8 +126,10 @@ export async function POST(request: Request) {
               const qLine = api.GetLine(modelID, qId);
               if (!qLine) continue;
               const areaVal = numVal((qLine as any).AreaValue);
+              const lengthVal = numVal((qLine as any).LengthValue);
               const volVal = numVal((qLine as any).VolumeValue);
               if (areaVal) areas[typeName] = (areas[typeName] || 0) + areaVal;
+              if (lengthVal) lengths[typeName] = (lengths[typeName] || 0) + lengthVal;
               if (volVal) volumes[typeName] = (volumes[typeName] || 0) + volVal;
             }
           }
@@ -139,6 +143,7 @@ export async function POST(request: Request) {
       ok: true,
       counts,
       areas,
+      lengths,
       volumes,
     });
   } catch (err: any) {

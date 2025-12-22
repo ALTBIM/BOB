@@ -65,6 +65,7 @@ interface ModelFile {
 type Quantities = {
   counts: Record<string, number>;
   areas: Record<string, number>;
+  lengths: Record<string, number>;
   volumes: Record<string, number>;
 };
 
@@ -138,6 +139,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
             [selectedModel]: {
               counts: data.counts || {},
               areas: data.areas || {},
+              lengths: data.lengths || {},
               volumes: data.volumes || {},
             },
           }));
@@ -268,8 +270,8 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                       ...pf,
                       status: "completed",
                       progress: 100,
-                      objects: parsed.objectCount || pf.objects || Math.floor(Math.random() * 5000) + 1000,
-                      zones: parsed.spaceCount || pf.zones || Math.floor(Math.random() * 20) + 5,
+                      objects: parsed.objectCount ?? pf.objects ?? 0,
+                      zones: parsed.spaceCount ?? pf.zones ?? 0,
                       materials: materials.length,
                       materialList: materials,
                       storageUrl: pf.storageUrl || pf.fileUrl,
@@ -747,13 +749,14 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                   <CardContent className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b">
-                          <th className="text-left p-2">Type</th>
-                          <th className="text-left p-2">Antall</th>
-                          <th className="text-left p-2">Areal (m²)</th>
-                          <th className="text-left p-2">Volum (m³)</th>
-                        </tr>
-                      </thead>
+  <tr className="border-b">
+    <th className="text-left p-2">Type</th>
+    <th className="text-left p-2">Antall</th>
+    <th className="text-left p-2">Areal (m2)</th>
+    <th className="text-left p-2">Lengde (m)</th>
+    <th className="text-left p-2">Volum (m3)</th>
+  </tr>
+</thead>
                       <tbody>
                         {[
                           "IFCWALLSTANDARDCASE",
@@ -774,6 +777,9 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                               <td className="p-2 font-mono">{quantities[selectedModel]?.counts?.[typeKey] ?? 0}</td>
                               <td className="p-2 font-mono">
                                 {formatQuantityNumber(quantities[selectedModel]?.areas?.[typeKey])}
+                              </td>
+                              <td className="p-2 font-mono">
+                                {formatQuantityNumber(quantities[selectedModel]?.lengths?.[typeKey])}
                               </td>
                               <td className="p-2 font-mono">
                                 {formatQuantityNumber(quantities[selectedModel]?.volumes?.[typeKey])}
@@ -847,15 +853,14 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b">
-                        <th className="text-left p-2">Beskrivelse</th>
-                        <th className="text-left p-2">Mengde</th>
-                        <th className="text-left p-2">Enhet</th>
-                        <th className="text-left p-2">Sone</th>
-                        <th className="text-left p-2">Materiale</th>
-                        <th className="text-left p-2">Merknader</th>
-                      </tr>
-                    </thead>
+  <tr className="border-b">
+    <th className="text-left p-2">Type</th>
+    <th className="text-left p-2">Antall</th>
+    <th className="text-left p-2">Areal (m2)</th>
+    <th className="text-left p-2">Lengde (m)</th>
+    <th className="text-left p-2">Volum (m3)</th>
+  </tr>
+</thead>
                     <tbody>
                       {generatedList.items.map((item) => (
                         <tr key={item.id} className="border-b hover:bg-slate-50">
@@ -1023,3 +1028,8 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     </div>
   );
 }
+
+
+
+
+

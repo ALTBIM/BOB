@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { db } from "@/lib/database";
 import { recordModelMaterials } from "@/lib/material-store";
-import { parseIfcFile } from "@/lib/ifc-parser";
+import { parseIfcFile, IFCElementSummary } from "@/lib/ifc-parser";
 import { uploadIfcFile, listAllFiles, uploadGenericFile } from "@/lib/storage";
 
 interface ModelUploadProps {
@@ -50,6 +50,7 @@ interface ModelFile {
   fileUrl?: string;
   storageUrl?: string;
   rawFile?: File;
+  elementSummary?: IFCElementSummary[];
 }
 
 export default function ModelUpload({ selectedProject }: ModelUploadProps) {
@@ -158,10 +159,11 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
         ...file,
         status: "completed",
         progress: 100,
-        objects: parsed.objectCount,
-        zones: parsed.spaceCount,
+        objects: parsed.objectCount ?? 0,
+        zones: parsed.spaceCount ?? 0,
         materials: materials.length,
         materialList: materials,
+        elementSummary: parsed.elementSummary || [],
       };
 
       setFiles((prev) => prev.map((f) => (f.id === file.id ? updated : f)));
@@ -452,20 +454,50 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                     )}
 
                     {file.status === "completed" && (
-                      <div className="grid grid-cols-3 gap-4 mt-2">
-                        <div className="text-center">
-                          <div className="text-lg font-semibold">{file.objects}</div>
-                          <div className="text-xs text-slate-500">Objekter</div>
+                      <>
+                        <div className="grid grid-cols-3 gap-4 mt-2">
+                          <div className="text-center">
+                            <div className="text-lg font-semibold">{file.objects}</div>
+                            <div className="text-xs text-slate-500">Objekter</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-lg font-semibold">{file.zones}</div>
+                            <div className="text-xs text-slate-500">Soner</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-lg font-semibold">{file.materials}</div>
+                            <div className="text-xs text-slate-500">Materialer</div>
+                          </div>
                         </div>
-                        <div className="text-center">
-                          <div className="text-lg font-semibold">{file.zones}</div>
-                          <div className="text-xs text-slate-500">Soner</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-lg font-semibold">{file.materials}</div>
-                          <div className="text-xs text-slate-500">Materialer</div>
-                        </div>
-                      </div>
+                        {file.elementSummary && file.elementSummary.length > 0 && (
+                          <div className="mt-4 overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b">
+                                  <th className="text-left p-2">Elementtype</th>
+                                  <th className="text-left p-2">Type</th>
+                                  <th className="text-left p-2">Areal (m2)</th>
+                                  <th className="text-left p-2">Lengde (m)</th>
+                                  <th className="text-left p-2">Volum (m3)</th>
+                                  <th className="text-left p-2">Antall</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {file.elementSummary.map((entry) => (
+                                  <tr key={`${entry.elementType}-${entry.typeName}`} className="border-b">
+                                    <td className="p-2">{entry.elementType}</td>
+                                    <td className="p-2">{entry.typeName}</td>
+                                    <td className="p-2 font-mono">{formatQuantityNumber(entry.netArea)}</td>
+                                    <td className="p-2 font-mono">{formatQuantityNumber(entry.length)}</td>
+                                    <td className="p-2 font-mono">{formatQuantityNumber(entry.volume)}</td>
+                                    <td className="p-2 font-mono">{entry.count}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {file.status === "error" && (
