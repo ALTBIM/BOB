@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { processIfcBuffer } from "@/lib/ifc-processor";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_IFC_BUCKET || "ifc-models";
 const MAX_SIZE_MB = 500;
@@ -91,6 +92,7 @@ export async function POST(request: Request) {
   }
 
   const path = `${projectId}/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+  const buffer = new Uint8Array(await file.arrayBuffer());
 
   // Try Supabase first if configured
   if (supabase) {
@@ -109,12 +111,18 @@ export async function POST(request: Request) {
         file,
         provider: "supabase",
       });
+      const modelId = persisted.modelId || path;
+      try {
+        await processIfcBuffer({ buffer, modelId, projectId });
+      } catch (err) {
+        console.warn("IFC processing feilet (supabase)", err);
+      }
       return NextResponse.json({
         path,
         publicUrl: publicData.publicUrl,
         provider: "supabase",
         fileId: persisted.fileId,
-        modelId: persisted.modelId,
+        modelId,
       });
     }
 
@@ -136,12 +144,18 @@ export async function POST(request: Request) {
         file,
         provider: "vercel-blob",
       });
+      const modelId = persisted.modelId || blob.pathname || path;
+      try {
+        await processIfcBuffer({ buffer, modelId, projectId });
+      } catch (err) {
+        console.warn("IFC processing feilet (blob)", err);
+      }
       return NextResponse.json({
         path: blob.pathname || path,
         publicUrl: blob.url,
         provider: "vercel-blob",
         fileId: persisted.fileId,
-        modelId: persisted.modelId,
+        modelId,
       });
     } catch (err) {
       console.error("Vercel Blob upload error", err);

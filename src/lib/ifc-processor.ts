@@ -1,306 +1,243 @@
-// Real IFC File Processing for BOB
-"use client";
+import * as WebIFC from "web-ifc";
+import path from "path";
+import { saveIfcIndex, type IfcObjectRow, type IfcPsetRow, type IfcQuantityRow } from "./ifc-index";
 
-import * as WebIFC from 'web-ifc';
+type ProcessResult = {
+  objects: number;
+  quantities: number;
+  psets: number;
+};
 
-export interface IFCObject {
-  id: number;
-  globalId: string;
-  type: string;
-  name: string;
-  description?: string;
-  material?: string;
-  dimensions: {
-    length?: number;
-    width?: number;
-    height?: number;
-    area?: number;
-    volume?: number;
-  };
-  location: {
-    floor?: string;
-    zone?: string;
-    room?: string;
-  };
-  properties: Record<string, any>;
-}
+const toArray = <T>(value: T | T[] | undefined | null): T[] => {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+};
 
-export interface IFCProcessingResult {
-  success: boolean;
-  error?: string;
-  objects: IFCObject[];
-  summary: {
-    totalObjects: number;
-    objectTypes: Record<string, number>;
-    materials: Record<string, number>;
-    floors: string[];
-    zones: string[];
-  };
-  processingTime: number;
-}
+const getRefId = (value: any): number | null => {
+  if (!value) return null;
+  if (typeof value === "number") return value;
+  if (typeof value === "object" && "value" in value) return Number((value as any).value);
+  return Number(value) || null;
+};
 
-class IFCProcessor {
-  private api: WebIFC.IfcAPI;
-  private modelID: number = 0;
+const getTextValue = (value: any): string => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && "value" in value) return String((value as any).value || "");
+  return String(value);
+};
 
-  constructor() {
-    this.api = new WebIFC.IfcAPI();
-    this.api.SetWasmPath('/');
-  }
+const getNumberValue = (value: any): number | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "number") return value;
+  if (typeof value === "object" && "value" in value) return Number((value as any).value);
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
-  async processIFCFile(file: File): Promise<IFCProcessingResult> {
-    const startTime = Date.now();
-    
-    try {
-      console.log('Starting IFC processing for:', file.name);
-      
-      // Initialize WebIFC
-      await this.api.Init();
-      
-      // Read file as array buffer
-      const arrayBuffer = await file.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      
-      // Open the model
-      this.modelID = this.api.OpenModel(uint8Array);
-      console.log('IFC model opened with ID:', this.modelID);
-      
-      // Extract objects
-      const objects = await this.extractObjects();
-      
-      // Generate summary
-      const summary = this.generateSummary(objects);
-      
-      // Close the model
-      this.api.CloseModel(this.modelID);
-      
-      const processingTime = Date.now() - startTime;
-      console.log(`IFC processing completed in ${processingTime}ms`);
-      
-      return {
-        success: true,
-        objects,
-        summary,
-        processingTime
-      };
-      
-    } catch (error) {
-      console.error('IFC processing failed:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-        objects: [],
-        summary: {
-          totalObjects: 0,
-          objectTypes: {},
-          materials: {},
-          floors: [],
-          zones: []
-        },
-        processingTime: Date.now() - startTime
-      };
+const getUnitText = (value: any): string | null => {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && "Name" in value) return getTextValue((value as any).Name);
+  if (typeof value === "object" && "UnitType" in value) return getTextValue((value as any).UnitType);
+  return null;
+};
+
+const getQuantityType = (quantityLine: any): IfcQuantityRow["quantityType"] => {
+  if (!quantityLine) return "OTHER";
+  if ("AreaValue" in quantityLine) return "AREA";
+  if ("LengthValue" in quantityLine) return "LENGTH";
+  if ("VolumeValue" in quantityLine) return "VOLUME";
+  if ("CountValue" in quantityLine) return "COUNT";
+  if ("WeightValue" in quantityLine) return "WEIGHT";
+  return "OTHER";
+};
+
+export async function processIfcBuffer(params: {
+  buffer: Uint8Array;
+  modelId: string;
+  projectId: string;
+}): Promise<ProcessResult> {
+  const { buffer, modelId, projectId } = params;
+  const api = new WebIFC.IfcAPI();
+  const wasmDir = path.join(process.cwd(), "node_modules", "web-ifc", "wasm");
+  api.SetWasmPath(wasmDir + path.sep);
+  await api.Init();
+  const model = api.OpenModel(buffer);
+
+  const storeyNameById = new Map<number, string>();
+  const spaceNameById = new Map<number, string>();
+  const storeyByElement = new Map<number, string>();
+  const spaceByElement = new Map<number, string>();
+
+  const storeyIds = api.GetLineIDsWithType(model, (WebIFC as any).IFCBUILDINGSTOREY, true);
+  if (storeyIds) {
+    for (let i = 0; i < storeyIds.size(); i += 1) {
+      const id = storeyIds.get(i);
+      const line = api.GetLine(model, id);
+      const name = getTextValue((line as any)?.Name);
+      if (name) storeyNameById.set(id, name);
     }
   }
 
-  private async extractObjects(): Promise<IFCObject[]> {
-    const objects: IFCObject[] = [];
-    
-    // Get all relevant IFC types
-    const relevantTypes = [
-      WebIFC.IFCWALL,
-      WebIFC.IFCBEAM,
-      WebIFC.IFCCOLUMN,
-      WebIFC.IFCSLAB,
-      WebIFC.IFCDOOR,
-      WebIFC.IFCWINDOW,
-      WebIFC.IFCSTAIR,
-      WebIFC.IFCRAILING,
-      WebIFC.IFCROOF,
-      WebIFC.IFCFURNISHINGELEMENT
-    ];
-
-    for (const ifcType of relevantTypes) {
-      try {
-        const elementIDs = this.api.GetLineIDsWithType(this.modelID, ifcType);
-        
-        for (let i = 0; i < elementIDs.size(); i++) {
-          const elementID = elementIDs.get(i);
-          const element = this.api.GetLine(this.modelID, elementID);
-          
-          if (element) {
-            const obj = await this.parseIFCElement(elementID, element, ifcType);
-            if (obj) {
-              objects.push(obj);
-            }
-          }
-        }
-      } catch (error) {
-        console.warn(`Failed to process IFC type ${ifcType}:`, error);
-      }
+  const spaceIds = api.GetLineIDsWithType(model, (WebIFC as any).IFCSPACE, true);
+  if (spaceIds) {
+    for (let i = 0; i < spaceIds.size(); i += 1) {
+      const id = spaceIds.get(i);
+      const line = api.GetLine(model, id);
+      const name = getTextValue((line as any)?.Name);
+      if (name) spaceNameById.set(id, name);
     }
-
-    console.log(`Extracted ${objects.length} objects from IFC model`);
-    return objects;
   }
 
-  private async parseIFCElement(elementID: number, element: any, ifcType: number): Promise<IFCObject | null> {
-    try {
-      // Get basic properties
-      const name = element.Name?.value || `Element_${elementID}`;
-      const description = element.Description?.value;
-      const globalId = element.GlobalId?.value || `${elementID}`;
-      
-      // Get object type name
-      const typeName = this.getIFCTypeName(ifcType);
-      
-      // Extract dimensions (simplified)
-      const dimensions = await this.extractDimensions(elementID);
-      
-      // Extract location info
-      const location = await this.extractLocation(elementID);
-      
-      // Extract material info
-      const material = await this.extractMaterial(elementID);
-      
-      // Get additional properties
-      const properties = await this.extractProperties(elementID);
+  const relContained = api.GetLineIDsWithType(model, (WebIFC as any).IFCRELCONTAINEDINSPATIALSTRUCTURE, true);
+  if (relContained) {
+    for (let i = 0; i < relContained.size(); i += 1) {
+      const relId = relContained.get(i);
+      const relLine = api.GetLine(model, relId);
+      const relatingStructure = getRefId((relLine as any)?.RelatingStructure);
+      if (!relatingStructure) continue;
+      const storeyName = storeyNameById.get(relatingStructure) || null;
+      const spaceName = spaceNameById.get(relatingStructure) || null;
+      const related = toArray((relLine as any)?.RelatedElements).map(getRefId).filter(Boolean) as number[];
+      related.forEach((elementId) => {
+        if (storeyName) storeyByElement.set(elementId, storeyName);
+        if (spaceName) spaceByElement.set(elementId, spaceName);
+      });
+    }
+  }
 
-      return {
-        id: elementID,
+  const objects: IfcObjectRow[] = [];
+  const elementIds = api.GetLineIDsWithType(model, (WebIFC as any).IFCELEMENT, true);
+  if (elementIds) {
+    for (let i = 0; i < elementIds.size(); i += 1) {
+      const id = elementIds.get(i);
+      const line = api.GetLine(model, id);
+      const globalId = getTextValue((line as any)?.GlobalId);
+      if (!globalId) continue;
+      const ifcType = api.GetNameFromTypeCode(api.GetLineType(model, id));
+      const name = getTextValue((line as any)?.Name) || getTextValue((line as any)?.ObjectType) || null;
+      objects.push({
+        modelId,
+        projectId,
         globalId,
-        type: typeName,
+        expressId: id,
+        ifcType,
         name,
-        description,
-        material,
-        dimensions,
-        location,
-        properties
-      };
-      
-    } catch (error) {
-      console.warn(`Failed to parse element ${elementID}:`, error);
-      return null;
+        storey: storeyByElement.get(id) || null,
+        space: spaceByElement.get(id) || null,
+      });
     }
   }
 
-  private getIFCTypeName(ifcType: number): string {
-    const typeMap: Record<number, string> = {
-      [WebIFC.IFCWALL]: 'wall',
-      [WebIFC.IFCBEAM]: 'beam', 
-      [WebIFC.IFCCOLUMN]: 'column',
-      [WebIFC.IFCSLAB]: 'slab',
-      [WebIFC.IFCDOOR]: 'door',
-      [WebIFC.IFCWINDOW]: 'window',
-      [WebIFC.IFCSTAIR]: 'stair',
-      [WebIFC.IFCRAILING]: 'railing',
-      [WebIFC.IFCROOF]: 'roof',
-      [WebIFC.IFCFURNISHINGELEMENT]: 'furniture'
-    };
-    return typeMap[ifcType] || 'unknown';
-  }
+  const psets: IfcPsetRow[] = [];
+  const quantities: IfcQuantityRow[] = [];
+  const relProps = api.GetLineIDsWithType(model, (WebIFC as any).IFCRELDEFINESBYPROPERTIES, true);
+  if (relProps) {
+    for (let i = 0; i < relProps.size(); i += 1) {
+      const relId = relProps.get(i);
+      const relLine = api.GetLine(model, relId);
+      const propDefId = getRefId((relLine as any)?.RelatingPropertyDefinition);
+      if (!propDefId) continue;
+      const propDef = api.GetLine(model, propDefId);
+      const propType = api.GetNameFromTypeCode(api.GetLineType(model, propDefId));
+      const related = toArray((relLine as any)?.RelatedObjects).map(getRefId).filter(Boolean) as number[];
+      if (related.length === 0) continue;
 
-  private async extractDimensions(elementID: number): Promise<IFCObject['dimensions']> {
-    try {
-      // Try to get geometry and calculate dimensions
-      // This is simplified - real implementation would use geometry analysis
-      return {
-        length: Math.random() * 5000 + 1000, // Mock for now
-        width: Math.random() * 500 + 100,
-        height: Math.random() * 500 + 100,
-        area: Math.random() * 10 + 1,
-        volume: Math.random() * 2 + 0.1
-      };
-    } catch (error) {
-      return {};
-    }
-  }
-
-  private async extractLocation(elementID: number): Promise<IFCObject['location']> {
-    try {
-      // Extract spatial relationships
-      // This would involve parsing IfcRelContainedInSpatialStructure
-      return {
-        floor: `Floor ${Math.floor(Math.random() * 3) + 1}`,
-        zone: `Zone ${String.fromCharCode(65 + Math.floor(Math.random() * 3))}${Math.floor(Math.random() * 3) + 1}`,
-        room: `Room ${Math.floor(Math.random() * 10) + 1}`
-      };
-    } catch (error) {
-      return {};
-    }
-  }
-
-  private async extractMaterial(elementID: number): Promise<string | undefined> {
-    try {
-      // Extract material information from IfcMaterial relationships
-      const materials = ['wood', 'steel', 'concrete', 'aluminum', 'glass', 'drywall'];
-      return materials[Math.floor(Math.random() * materials.length)];
-    } catch (error) {
-      return undefined;
-    }
-  }
-
-  private async extractProperties(elementID: number): Promise<Record<string, any>> {
-    try {
-      // Extract property sets (IfcPropertySet)
-      return {
-        loadBearing: Math.random() > 0.5,
-        fireRating: Math.random() > 0.7 ? 'REI 60' : 'REI 30',
-        supplier: ['Moelven', 'Norsk Stål', 'Norcem', 'Gyproc'][Math.floor(Math.random() * 4)]
-      };
-    } catch (error) {
-      return {};
-    }
-  }
-
-  private generateSummary(objects: IFCObject[]): IFCProcessingResult['summary'] {
-    const objectTypes: Record<string, number> = {};
-    const materials: Record<string, number> = {};
-    const floors = new Set<string>();
-    const zones = new Set<string>();
-
-    objects.forEach(obj => {
-      // Count object types
-      objectTypes[obj.type] = (objectTypes[obj.type] || 0) + 1;
-      
-      // Count materials
-      if (obj.material) {
-        materials[obj.material] = (materials[obj.material] || 0) + 1;
+      if (propType === "IFCELEMENTQUANTITY") {
+        const qtoName = getTextValue((propDef as any)?.Name) || null;
+        const qList = toArray((propDef as any)?.Quantities).map(getRefId).filter(Boolean) as number[];
+        qList.forEach((qId) => {
+          const qLine = api.GetLine(model, qId);
+          if (!qLine) return;
+          const qName = getTextValue((qLine as any)?.Name) || "Quantity";
+          const quantityType = getQuantityType(qLine);
+          const value =
+            getNumberValue((qLine as any)?.AreaValue) ??
+            getNumberValue((qLine as any)?.LengthValue) ??
+            getNumberValue((qLine as any)?.VolumeValue) ??
+            getNumberValue((qLine as any)?.CountValue) ??
+            getNumberValue((qLine as any)?.WeightValue);
+          if (value === null) return;
+          const unit = getUnitText((qLine as any)?.Unit);
+          related.forEach((elementId) => {
+            const elementLine = api.GetLine(model, elementId);
+            const globalId = getTextValue((elementLine as any)?.GlobalId);
+            if (!globalId) return;
+            quantities.push({
+              modelId,
+              projectId,
+              globalId,
+              qtoSet: qtoName,
+              name: qName,
+              value,
+              unit,
+              source: "ifc_qto",
+              method: "rel-defines",
+              quantityType,
+            });
+          });
+        });
       }
-      
-      // Collect floors and zones
-      if (obj.location.floor) floors.add(obj.location.floor);
-      if (obj.location.zone) zones.add(obj.location.zone);
-    });
 
-    return {
-      totalObjects: objects.length,
-      objectTypes,
-      materials,
-      floors: Array.from(floors),
-      zones: Array.from(zones)
-    };
+      if (propType === "IFCPROPERTYSET") {
+        const psetName = getTextValue((propDef as any)?.Name);
+        const props = toArray((propDef as any)?.HasProperties).map(getRefId).filter(Boolean) as number[];
+        props.forEach((propId) => {
+          const propLine = api.GetLine(model, propId);
+          const propName = getTextValue((propLine as any)?.Name);
+          const valueText = getTextValue((propLine as any)?.NominalValue);
+          const unitText = getUnitText((propLine as any)?.Unit);
+          related.forEach((elementId) => {
+            const elementLine = api.GetLine(model, elementId);
+            const globalId = getTextValue((elementLine as any)?.GlobalId);
+            if (!globalId) return;
+            psets.push({
+              modelId,
+              projectId,
+              globalId,
+              psetName,
+              propName,
+              value: valueText || null,
+              unit: unitText,
+            });
+
+            if (psetName === "Pset_QuantityTakeOff") {
+              const numeric = getNumberValue((propLine as any)?.NominalValue);
+              if (numeric !== null) {
+                const lower = propName.toLowerCase();
+                let quantityType: IfcQuantityRow["quantityType"] = "OTHER";
+                if (lower.includes("area")) quantityType = "AREA";
+                if (lower.includes("length")) quantityType = "LENGTH";
+                if (lower.includes("volume")) quantityType = "VOLUME";
+                if (lower.includes("count")) quantityType = "COUNT";
+                quantities.push({
+                  modelId,
+                  projectId,
+                  globalId,
+                  qtoSet: psetName,
+                  name: propName,
+                  value: numeric,
+                  unit: unitText,
+                  source: "pset_qto",
+                  method: "pset-quantity",
+                  quantityType,
+                });
+              }
+            }
+          });
+        });
+      }
+    }
   }
-}
 
-// Export singleton instance
-export const ifcProcessor = new IFCProcessor();
+  await saveIfcIndex(modelId, projectId, { objects, psets, quantities });
 
-// Helper functions
-export const formatIFCObjectType = (type: string): string => {
-  return type.charAt(0).toUpperCase() + type.slice(1).replace(/([A-Z])/g, ' $1');
-};
+  api.CloseModel(model);
 
-export const getObjectTypeIcon = (type: string): string => {
-  const icons: Record<string, string> = {
-    wall: '🧱',
-    beam: '📏',
-    column: '🏛️',
-    slab: '⬜',
-    door: '🚪',
-    window: '🪟',
-    stair: '🪜',
-    roof: '🏠',
-    furniture: '🪑'
+  return {
+    objects: objects.length,
+    quantities: quantities.length,
+    psets: psets.length,
   };
-  return icons[type] || '📦';
-};
+}

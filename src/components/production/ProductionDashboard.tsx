@@ -63,21 +63,21 @@ interface ModelFile {
   elementSummary?: IFCElementSummary[];
 }
 
-type Quantities = {
-  counts: Record<string, number>;
-  areas: Record<string, number>;
-  lengths: Record<string, number>;
-  volumes: Record<string, number>;
-};
-
 export default function ProductionDashboard({ selectedProject }: ProductionDashboardProps) {
   const [selectedModel, setSelectedModel] = useState<string>("");
   const search = typeof window !== "undefined" ? window.location.search : "";
   const [activeTab, setActiveTab] = useState("quantities");
-  const [quantities, setQuantities] = useState<Record<string, Quantities>>({});
   const [availableModels, setAvailableModels] = useState<BIMModel[]>([]);
   const [availableMaterials, setAvailableMaterials] = useState<string[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
+  const [groupBy, setGroupBy] = useState<"type" | "storey" | "space">("type");
+  const [includeArea, setIncludeArea] = useState(true);
+  const [includeLength, setIncludeLength] = useState(true);
+  const [includeVolume, setIncludeVolume] = useState(true);
+  const [includeCount, setIncludeCount] = useState(true);
+  const [quantityRows, setQuantityRows] = useState<
+    { group: string; quantityType: string; name: string; value: number; unit?: string | null; source: string }[]
+  >([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedList, setGeneratedList] = useState<QuantityList | null>(null);
   const [files, setFiles] = useState<ModelFile[]>([]);
@@ -86,6 +86,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
   const [elementSummary, setElementSummary] = useState<IFCElementSummary[]>([]);
   const [metadataMaterials, setMetadataMaterials] = useState<string[]>([]);
   const [metadataStatus, setMetadataStatus] = useState<Record<string, "idle" | "loading" | "error">>({});
+  const [quantityStatus, setQuantityStatus] = useState<Record<string, "idle" | "loading" | "error">>({});
   const [isDrawingExporting, setIsDrawingExporting] = useState(false);
   const [banner, setBanner] = useState<{ type: "info" | "error"; text: string } | null>(null);
   const [supabaseDiagnostics, setSupabaseDiagnostics] = useState<{
@@ -198,41 +199,6 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     loadMetadata();
   }, [selectedProject, selectedModel, existingFiles, metadataStatus]);
 
-  // Fetch real IFC quantities when model changes
-  useEffect(() => {
-    const fetchQuantities = async () => {
-      if (!selectedProject || !selectedModel) return;
-      const file = existingFiles.find((f) => f.id === selectedModel);
-      if (!file?.storageUrl) return;
-      try {
-        const res = await fetch("/api/ifc/quantities", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileUrl: file.storageUrl }),
-        });
-        if (!res.ok) {
-          console.warn("Quantities fetch feilet", res.status);
-          return;
-        }
-        const data = await res.json();
-        if (data?.counts) {
-          setQuantities((prev) => ({
-            ...prev,
-            [selectedModel]: {
-              counts: data.counts || {},
-              areas: data.areas || {},
-              lengths: data.lengths || {},
-              volumes: data.volumes || {},
-            },
-          }));
-        }
-      } catch (err) {
-        console.warn("Quantities fetch feilet", err);
-      }
-    };
-    fetchQuantities();
-  }, [selectedProject, selectedModel, existingFiles]);
-
   const loadProjectModels = async () => {
     if (!selectedProject) return;
 
@@ -296,7 +262,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   const processFiles = (fileList: File[]) => {
     if (!selectedProject) {
-      setBanner({ type: "error", text: "Velg et prosjekt fra dropdown-menyen først." });
+      setBanner({ type: "error", text: "Velg et prosjekt fra dropdown-menyen f\u00f8rst." });
       return;
     }
 
@@ -491,79 +457,137 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     return Number(value).toLocaleString("no-NO", { maximumFractionDigits: 2 });
   };
 
+  const getQuantityScope = (name: string) => {
+    const lower = name.toLowerCase();
+    if (lower.includes("gross")) return "Gross";
+    if (lower.includes("net")) return "Net";
+    return "Ukjent";
+  };
+
+  const formatQuantityUnit = (unit: string | null | undefined, quantityType: string) => {
+    const normalized = (unit || "").toUpperCase();
+    if (normalized.includes("SQUARE") || normalized.includes("AREA")) return "m2";
+    if (normalized.includes("CUBIC") || normalized.includes("VOLUME")) return "m3";
+    if (normalized.includes("METRE") || normalized.includes("METER") || normalized.includes("LENGTH")) return "m";
+    if (quantityType === "COUNT") return "stk";
+    return unit || "";
+  };
+
   const getProjectFiles = () => {
     return existingFiles.filter((file) => (selectedProject ? file.projectId === selectedProject : true));
   };
 
   const metadataState = selectedModel ? metadataStatus[selectedModel] : undefined;
+  const quantityState = selectedModel ? quantityStatus[selectedModel] : undefined;
+
+  const ensureIfcIndex = async (fileUrl: string) => {
+    if (!selectedProject || !selectedModel) return false;
+    if (quantityState === "loading") return false;
+    setQuantityStatus((prev) => ({ ...prev, [selectedModel]: "loading" }));
+    try {
+      const res = await fetch("/api/ifc/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: selectedProject, modelId: selectedModel, fileUrl }),
+      });
+      if (!res.ok) {
+        throw new Error("IFC processing feilet (" + res.status + ")");
+      }
+      setQuantityStatus((prev) => ({ ...prev, [selectedModel]: "idle" }));
+      return true;
+    } catch (err) {
+      console.warn("IFC processing feilet", err);
+      setQuantityStatus((prev) => ({ ...prev, [selectedModel]: "error" }));
+      return false;
+    }
+  };
 
   const generateQuantityList = async (
     type: "quantities" | "drawings" | "control",
     materialsOverride?: string[]
   ) => {
-    const materials = materialsOverride ?? selectedMaterials;
-    if (!selectedModel) {
-      setBanner({ type: "error", text: "Velg modell først." });
+    if (!selectedModel || !selectedProject) {
+      setBanner({ type: "error", text: "Velg modell f\u00f8rst." });
       return;
     }
-    if (materials.length === 0) {
-      setBanner({ type: "error", text: "Ingen materialer funnet i IFC. Last opp en fil med materialdata." });
-      return;
-    }
-
 
     setIsGenerating(true);
+    setQuantityRows([]);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      const fieldValues = [
+        includeArea ? "AREA" : null,
+        includeLength ? "LENGTH" : null,
+        includeVolume ? "VOLUME" : null,
+        includeCount ? "COUNT" : null,
+      ].filter(Boolean) as string[];
 
-      const modelMeta =
-        availableModels.find((m) => m.id === selectedModel) ||
-        existingFiles.find((f) => f.id === selectedModel);
-      const q = quantities[selectedModel]?.counts || {};
-      const objects =
-        modelMeta?.objects ??
-        (q.IFCWALL ?? 0) +
-          (q.IFCSLAB ?? 0) +
-          (q.IFCBEAM ?? 0) +
-          (q.IFCCOLUMN ?? 0) +
-          (q.IFCDOOR ?? 0) +
-          (q.IFCWINDOW ?? 0) +
-          (q.IFCSPACE ?? 0);
-      const hasRealData = Boolean(objects) || Object.keys(q).length > 0;
-      const unit = "stk";
-      const items: QuantityItem[] = [];
-      let totalQuantity = 0;
+      if (fieldValues.length === 0) {
+        setBanner({ type: "error", text: "Velg minst ett felt (areal, lengde, volum eller antall)." });
+        return;
+      }
 
-      materials.forEach((materialType) => {
-        const base = objects || 1;
-        const qty = hasRealData ? Math.max(1, Math.round(base / Math.max(1, materials.length))) : 1;
-        items.push({
-          id: `item-${materialType}-${selectedModel}`,
-          description: `${materialType} - Hele modellen`,
-          quantity: qty,
-          unit,
-          zone: "Hele modellen",
-          material: materialType,
-          notes: hasRealData ? "Estimert fra IFC-data." : "Forenklet beregning (manglende IFC-data).",
-        });
-        totalQuantity += qty;
-      });
+      const buildUrl = () =>
+        "/api/ifc/quantities?projectId=" +
+        encodeURIComponent(selectedProject) +
+        "&modelId=" +
+        encodeURIComponent(selectedModel) +
+        "&groupBy=" +
+        groupBy +
+        "&fields=" +
+        encodeURIComponent(fieldValues.join(","));
 
-      const list: QuantityList = {
-        id: `list-${Date.now()}`,
-        name: `${
-          type === "quantities" ? "Mengdeliste" : type === "drawings" ? "Tegningsproduksjon" : "Modellkontroll"
-        } - ${new Date().toLocaleDateString("no-NO")}`,
-        type,
-        items,
-        totalQuantity: Math.round(totalQuantity * 100) / 100,
-        unit,
-        generatedAt: new Date().toISOString(),
-        simplified: !hasRealData,
+      const fetchRows = async () => {
+        const res = await fetch(buildUrl());
+        if (!res.ok) {
+          throw new Error("Quantities API feilet (" + res.status + ")");
+        }
+        const data = await res.json();
+        return (data?.rows as typeof quantityRows) || [];
       };
 
-      setGeneratedList(list);
+      let rows = await fetchRows();
+
+      if (rows.length === 0) {
+        const file = existingFiles.find((f) => f.id === selectedModel);
+        const fileUrl = file?.storageUrl || file?.fileUrl;
+        if (fileUrl) {
+          const processed = await ensureIfcIndex(fileUrl);
+          if (processed) {
+            rows = await fetchRows();
+          }
+        }
+      }
+
+      setQuantityRows(rows);
+
+      if (rows.length === 0) {
+        setBanner({
+          type: "info",
+          text:
+            "Fant ingen mengder. Kontroller at IFC har QTO/QuantityTakeOff, eller prosesser modellen p\u00e5 nytt.",
+        });
+      }
+
+      const items: QuantityItem[] = rows.map((row, index) => ({
+        id: "row-" + index,
+        description: row.group,
+        quantity: row.value,
+        unit: formatQuantityUnit(row.unit, row.quantityType),
+        zone: row.quantityType,
+        material: row.name,
+        notes: row.source + " \u2022 " + getQuantityScope(row.name),
+      }));
+
+      setGeneratedList({
+        id: "list-" + Date.now(),
+        name: "Mengdeliste - " + new Date().toLocaleDateString("no-NO"),
+        type,
+        items,
+        totalQuantity: rows.length,
+        unit: "",
+        generatedAt: new Date().toISOString(),
+      });
       if (materialsOverride) {
         setSelectedMaterials(materialsOverride);
       }
@@ -577,18 +601,14 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   const handleFullExtraction = () => {
     if (!selectedModel) {
-      setBanner({ type: "error", text: "Velg modell først." });
-      return;
-    }
-    if (availableMaterials.length === 0) {
-      setBanner({ type: "error", text: "Ingen materialer funnet i IFC." });
+      setBanner({ type: "error", text: "Velg modell f\u00f8rst." });
       return;
     }
     generateQuantityList("quantities", availableMaterials);
   };
 
   const downloadList = (format: "csv" | "excel" | "pdf") => {
-    if (!generatedList) return;
+    if (!generatedList || quantityRows.length === 0) return;
 
     try {
       let content = "";
@@ -596,14 +616,15 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       let mimeType = "";
 
       if (format === "csv") {
-        const headers = ["Beskrivelse", "Mengde", "Enhet", "Sone", "Materiale", "Merknader"];
-        const rows = generatedList.items.map((item) => [
-          item.description,
-          item.quantity.toString(),
-          item.unit,
-          item.zone,
-          item.material,
-          item.notes || "",
+        const headers = ["Gruppe", "Felt", "Navn", "Verdi", "Enhet", "Kilde", "Net/Gross"];
+        const rows = quantityRows.map((row) => [
+          row.group,
+          row.quantityType,
+          row.name,
+          row.value.toString(),
+          formatQuantityUnit(row.unit, row.quantityType),
+          row.source,
+          getQuantityScope(row.name),
         ]);
 
         content = [headers, ...rows]
@@ -633,7 +654,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
 
   const generateDrawingSvg = () => {
     if (!selectedModel) {
-      setBanner({ type: "error", text: "Velg modell først." });
+      setBanner({ type: "error", text: "Velg modell f\u00f8rst." });
       return;
     }
     const model = availableModels.find((m) => m.id === selectedModel);
@@ -757,27 +778,72 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                   <div className="p-4 border border-dashed rounded-lg text-center">
                     <FileText className="w-8 h-8 text-slate-400 mx-auto mb-2" />
                     <p className="text-slate-600">Ingen IFC-filer tilgjengelig</p>
-                    <p className="text-sm text-slate-500">Last opp en IFC-fil først</p>
+                    <p className="text-sm text-slate-500">Last opp en IFC-fil f\u00f8rst</p>
                   </div>
                 )}
               </div>
 
               {selectedModel && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <Card>
+                                    <Card>
                     <CardHeader>
-                      <CardTitle className="text-lg">Soner og etasjer</CardTitle>
-                      <CardDescription>Foreløpig genereres mengder for hele modellen</CardDescription>
+                      <CardTitle className="text-lg">Mengdeinnstillinger</CardTitle>
+                      <CardDescription>Gruppering og felter for uttrekk</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                      <p className="text-sm text-slate-600">
-                        Soner og etasjer vil bli hentet fra IFC-modellen når dette er koblet opp. Foreløpig kan du kun
-                        generere mengder for hele modellen.
-                      </p>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Gruppering</Label>
+                        <Select value={groupBy} onValueChange={(value) => setGroupBy(value as "type" | "storey" | "space")}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Velg gruppering" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="type">Elementtype</SelectItem>
+                            <SelectItem value="storey">Etasje</SelectItem>
+                            <SelectItem value="space">Rom / sone</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-slate-500">Hvis IFC mangler etasjer/rom vises "Ukjent".</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Felt</Label>
+                        <div className="flex flex-wrap gap-3">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id="field-area"
+                              checked={includeArea}
+                              onCheckedChange={(checked) => setIncludeArea(Boolean(checked))}
+                            />
+                            <Label htmlFor="field-area" className="text-sm">Areal</Label>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id="field-length"
+                              checked={includeLength}
+                              onCheckedChange={(checked) => setIncludeLength(Boolean(checked))}
+                            />
+                            <Label htmlFor="field-length" className="text-sm">Lengde</Label>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id="field-volume"
+                              checked={includeVolume}
+                              onCheckedChange={(checked) => setIncludeVolume(Boolean(checked))}
+                            />
+                            <Label htmlFor="field-volume" className="text-sm">Volum</Label>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id="field-count"
+                              checked={includeCount}
+                              onCheckedChange={(checked) => setIncludeCount(Boolean(checked))}
+                            />
+                            <Label htmlFor="field-count" className="text-sm">Antall</Label>
+                          </div>
+                        </div>
+                      </div>
                     </CardContent>
-                  </Card>
-
-                  <Card>
+                  </Card><Card>
                     <CardHeader>
                       <CardTitle className="text-lg">Velg materialer</CardTitle>
                       <CardDescription>Materialer fra IFC-filen (web-ifc, fallback til tekst ved feil)</CardDescription>
@@ -887,7 +953,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                 <div className="flex flex-wrap justify-center gap-3">
                   <Button
                     onClick={() => generateQuantityList("quantities")}
-                    disabled={isGenerating || selectedMaterials.length === 0}
+                    disabled={isGenerating}
                     size="lg"
                   >
                     {isGenerating ? (
@@ -917,7 +983,8 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                   <div>
                     <CardTitle>{generatedList.name}</CardTitle>
                     <CardDescription>
-                      {generatedList.items.length} posisjoner • Total: {generatedList.totalQuantity} {generatedList.unit}
+                      {quantityRows.length} rader {"\u2022"} Gruppert p{"\u00e5"}{" "}
+                      {groupBy === "type" ? "elementtype" : groupBy === "storey" ? "etasje" : "rom/sone"}
                     </CardDescription>
                   </div>
                   <div className="flex space-x-2">
@@ -944,24 +1011,27 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                   <table className="w-full text-sm">
                     <thead>
   <tr className="border-b">
-    <th className="text-left p-2">Type</th>
-    <th className="text-left p-2">Antall</th>
-    <th className="text-left p-2">Areal (m2)</th>
-    <th className="text-left p-2">Lengde (m)</th>
-    <th className="text-left p-2">Volum (m3)</th>
+    <th className="text-left p-2">Gruppe</th>
+    <th className="text-left p-2">Felt</th>
+    <th className="text-left p-2">Navn</th>
+    <th className="text-left p-2">Verdi</th>
+    <th className="text-left p-2">Enhet</th>
+    <th className="text-left p-2">Kilde</th>
+    <th className="text-left p-2">Net/Gross</th>
   </tr>
 </thead>
                     <tbody>
-                      {generatedList.items.map((item) => (
-                        <tr key={item.id} className="border-b hover:bg-slate-50">
-                          <td className="p-2">{item.description}</td>
-                          <td className="p-2 font-mono font-medium">{item.quantity}</td>
+                      {quantityRows.map((row, index) => (
+                        <tr key={`${row.group}-${row.name}-${index}`} className="border-b hover:bg-slate-50">
+                          <td className="p-2">{row.group}</td>
+                          <td className="p-2">{row.quantityType}</td>
+                          <td className="p-2">{row.name}</td>
+                          <td className="p-2 font-mono font-medium">{formatQuantityNumber(row.value)}</td>
                           <td className="p-2">
-                            <Badge variant="outline">{item.unit}</Badge>
+                            <Badge variant="outline">{formatQuantityUnit(row.unit, row.quantityType)}</Badge>
                           </td>
-                          <td className="p-2 text-sm">{item.zone}</td>
-                          <td className="p-2 text-sm">{item.material}</td>
-                          <td className="p-2 text-xs text-slate-500">{item.notes}</td>
+                          <td className="p-2 text-xs text-slate-500">{row.source}</td>
+                          <td className="p-2 text-xs text-slate-500">{getQuantityScope(row.name)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -984,7 +1054,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
               {availableModels.length === 0 ? (
                 <div className="text-center py-8">
                   <Image className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                  <p className="text-slate-600">Ingen modeller tilgjengelig. Last opp en IFC først.</p>
+                  <p className="text-slate-600">Ingen modeller tilgjengelig. Last opp en IFC f\u00f8rst.</p>
                 </div>
               ) : (
                 <>
@@ -1118,6 +1188,24 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

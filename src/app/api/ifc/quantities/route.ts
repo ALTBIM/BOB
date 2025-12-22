@@ -1,11 +1,37 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import * as WebIFC from "web-ifc";
 import path from "path";
+import { getQuantitySummary } from "@/lib/ifc-index";
 
 export const runtime = "nodejs";
 
 const MAX_SIZE_MB = 200;
 
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const projectId = url.searchParams.get("projectId") || "";
+  const modelId = url.searchParams.get("modelId") || "";
+  const groupBy = (url.searchParams.get("groupBy") || "type") as "type" | "storey" | "space";
+  const filterType = url.searchParams.get("filterType") || undefined;
+  const filterName = url.searchParams.get("sum") || undefined;
+  const fieldsParam = url.searchParams.get("fields") || "AREA,LENGTH,VOLUME";
+  const fields = fieldsParam
+    .split(",")
+    .map((f) => f.trim().toUpperCase())
+    .filter(Boolean) as ("AREA" | "LENGTH" | "VOLUME" | "COUNT" | "WEIGHT")[];
+
+  if (!projectId || !modelId) {
+    return NextResponse.json({ error: "projectId og modelId er p\u00e5krevd" }, { status: 400 });
+  }
+
+  try {
+    const rows = await getQuantitySummary({ projectId, modelId, groupBy, fields, filterType, filterName });
+    return NextResponse.json({ ok: true, rows });
+  } catch (err: any) {
+    console.error("Quantities summary error", err);
+    return NextResponse.json({ error: "Kunne ikke hente mengder", detail: String(err) }, { status: 500 });
+  }
+}
 // Minimal type list to report counts
 const TYPES = [
   "IFCPROJECT",
@@ -151,3 +177,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Klarte ikke hente mengder", detail: String(err) }, { status: 500 });
   }
 }
+
