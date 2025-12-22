@@ -20,6 +20,24 @@ const WASM_CDN = "https://cdn.jsdelivr.net/npm/web-ifc@0.0.74/wasm/";
 const ELEMENT_REGEX = /^#\d+=IFC(WALLSTANDARDCASE|WALL|SLAB|ROOF|BEAM|COLUMN|DOOR|WINDOW|COVERING|FURNISHINGELEMENT|BUILDINGELEMENTPROXY)\b/gm;
 const SPACE_REGEX = /^#\d+=IFCSPACE\b/gm;
 
+const decodeIfcText = (value: string): string => {
+  if (!value) return value;
+  let decoded = value;
+  decoded = decoded.replace(/\\X\\([0-9A-Fa-f]{2})/g, (_, hex) => {
+    const code = parseInt(hex, 16);
+    return Number.isFinite(code) ? String.fromCharCode(code) : "";
+  });
+  decoded = decoded.replace(/\\X2\\([0-9A-Fa-f]+)\\X0\\/g, (_, hex) => {
+    let output = "";
+    for (let i = 0; i + 3 < hex.length; i += 4) {
+      const code = parseInt(hex.slice(i, i + 4), 16);
+      if (Number.isFinite(code)) output += String.fromCharCode(code);
+    }
+    return output;
+  });
+  return decoded;
+};
+
 const toArray = <T>(value: T | T[] | undefined | null): T[] => {
   if (!value) return [];
   return Array.isArray(value) ? value : [value];
@@ -68,12 +86,14 @@ const rankQuantityName = (name: string, kind: "area" | "length" | "volume"): num
   return 0;
 };
 
-async function textFallback(file: File): Promise<IFCParsedData> {
-  const text = await file.text();
-  const materialMatches: string[] = [];
+const extractMaterialsFromText = (text: string): string[] => {
+  const matches: string[] = [];
   const regexes = [
     /IFCMATERIAL\(['"]?([^'"\)]+)['"]?\)/gi,
     /IFCMATERIALLAYER\(['"]?([^'"\)]+)['"]?\)/gi,
+    /IFCMATERIALCONSTITUENTSET\(['"]?([^'"\)]+)['"]?\)/gi,
+    /IFCMATERIALCONSTITUENT\(['"]?([^'"\)]+)['"]?\)/gi,
+    /IFCMATERIALLAYERSET\(['"]?([^'"\)]+)['"]?\)/gi,
     /IFCMATERIALLIST\(([^\)]+)\)/gi,
   ];
 
@@ -86,7 +106,35 @@ async function textFallback(file: File): Promise<IFCParsedData> {
         .split(/['",]/)
         .map((s) => s.trim())
         .filter(Boolean)
-        .forEach((token) => materialMatches.push(token.toLowerCase()));
+        .forEach((token) => matches.push(decodeIfcText(token)));
+    }
+  });
+
+  return Array.from(new Set(matches.map((m) => m.trim()).filter(Boolean)));
+};
+
+async function textFallback(file: File): Promise<IFCParsedData> {
+  const text = await file.text();
+  const materialMatches: string[] = [];
+  const regexes = [
+    /IFCMATERIAL\(['"]?([^'"\)]+)['"]?\)/gi,
+    /IFCMATERIALLAYER\(['"]?([^'"\)]+)['"]?\)/gi,
+    /IFCMATERIALCONSTITUENTSET\(['"]?([^'"\)]+)['"]?\)/gi,
+    /IFCMATERIALCONSTITUENT\(['"]?([^'"\)]+)['"]?\)/gi,
+    /IFCMATERIALLAYERSET\(['"]?([^'"\)]+)['"]?\)/gi,
+    /IFCMATERIALLIST\(([^\)]+)\)/gi,
+  ];
+
+  regexes.forEach((re) => {
+    let m: RegExpExecArray | null;
+    // eslint-disable-next-line no-cond-assign
+    while ((m = re.exec(text))) {
+      const raw = m[1] ?? "";
+      raw
+        .split(/['",]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .forEach((token) => materialMatches.push(decodeIfcText(token).toLowerCase()));
     }
   });
 
@@ -135,7 +183,7 @@ export async function parseIfcFile(file: File): Promise<IFCParsedData> {
 
     const materialMap = new Map<string, string>();
     const addMaterialName = (name: string) => {
-      const trimmed = name.trim();
+      const trimmed = decodeIfcText(name).trim();
       if (!trimmed) return;
       const key = trimmed.toLowerCase();
       if (!materialMap.has(key)) materialMap.set(key, trimmed);
@@ -159,6 +207,7 @@ export async function parseIfcFile(file: File): Promise<IFCParsedData> {
           break;
         }
         case "IFCMATERIALLAYERSET": {
+          addMaterialName(getTextValue(materialLine?.Name));
           toArray(materialLine?.MaterialLayers).forEach((layer) => collectMaterialRef(layer));
           break;
         }
@@ -167,6 +216,7 @@ export async function parseIfcFile(file: File): Promise<IFCParsedData> {
           break;
         }
         case "IFCMATERIALCONSTITUENTSET": {
+          addMaterialName(getTextValue(materialLine?.Name));
           toArray(materialLine?.MaterialConstituents).forEach((constituent) => collectMaterialRef(constituent));
           break;
         }
@@ -180,6 +230,7 @@ export async function parseIfcFile(file: File): Promise<IFCParsedData> {
           break;
         }
         case "IFCMATERIALPROFILESET": {
+          addMaterialName(getTextValue(materialLine?.Name));
           toArray(materialLine?.MaterialProfiles).forEach((profile) => collectMaterialRef(profile));
           break;
         }
@@ -247,6 +298,12 @@ export async function parseIfcFile(file: File): Promise<IFCParsedData> {
           // ignore per-type errors
         }
       });
+    }
+
+    if (materialMap.size === 0) {
+      const fallbackText = await file.text();
+      const textMaterials = extractMaterialsFromText(fallbackText);
+      textMaterials.forEach(addMaterialName);
     }
 
     const elementTypeCode = (ifc as any).IFCELEMENT;
