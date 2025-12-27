@@ -1,9 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, FolderOpen } from "lucide-react";
 import { ProjectFiles } from "@/components/files/ProjectFiles";
@@ -16,8 +15,6 @@ export default function FilesPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -61,7 +58,9 @@ export default function FilesPage() {
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <CardTitle>Filoversikt</CardTitle>
-            <CardDescription>Prosjektsikret filarkiv. Filtrer på type og søk på filnavn.</CardDescription>
+            <CardDescription>
+              Prosjektsikret filarkiv. Velg prosjekt for \u00e5 se og laste opp filer.
+            </CardDescription>
           </div>
           <div className="flex gap-3 items-center">
             <div className="w-64">
@@ -93,30 +92,12 @@ export default function FilesPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          <Input
-            placeholder="Søk på filnavn..."
-            className="w-64"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <Select value={typeFilter || ""} onValueChange={(v) => setTypeFilter(v || null)}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Filter på type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">Alle typer</SelectItem>
-              <SelectItem value="application/pdf">PDF</SelectItem>
-              <SelectItem value="model/ifc">IFC</SelectItem>
-              <SelectItem value="application/vnd.ms-excel">XLS/XLSX</SelectItem>
-              <SelectItem value="application/msword">DOC/DOCX</SelectItem>
-              <SelectItem value="image/">Bilder</SelectItem>
-            </SelectContent>
-          </Select>
+        <CardContent className="text-sm text-slate-600">
+          Du kan filtrere, s\u00f8ke og forh\u00e5ndsvisning styres i filoversikten under.
         </CardContent>
       </Card>
 
-      <ProjectFiles selectedProject={selectedProject} search={search} typeFilter={typeFilter} />
+      <ProjectFiles selectedProject={selectedProject} />
     </div>
   );
 }
