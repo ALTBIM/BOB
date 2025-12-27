@@ -91,14 +91,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Kun .ifc eller .ifczip er stottet" }, { status: 400 });
   }
 
-  const path = `${projectId}/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+  const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+  const path = `${projectId}/${safeName}`;
   const buffer = new Uint8Array(await file.arrayBuffer());
 
   // Try Supabase first if configured
   if (supabase) {
     const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
       cacheControl: "3600",
-      upsert: false,
+      upsert: true,
       contentType: file.type || "application/octet-stream",
     });
 
@@ -136,6 +137,7 @@ export async function POST(request: Request) {
         access: "public",
         token: BLOB_TOKEN,
         contentType: file.type || "application/octet-stream",
+        addRandomSuffix: false,
       });
       const persisted = await persistRecord({
         projectId,

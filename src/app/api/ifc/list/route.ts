@@ -5,6 +5,8 @@ import { list } from "@vercel/blob";
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_IFC_BUCKET || "ifc-models";
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN || process.env.NEXT_PUBLIC_BLOB_READ_WRITE_TOKEN || "";
 
+const normalizeName = (name: string) => name.replace(/^\d{10,}-/, "");
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get("projectId") || "";
@@ -29,7 +31,7 @@ export async function GET(request: Request) {
         dbFiles.forEach((f: any) => {
           files.push({
             path: f.path,
-            name: f.name,
+            name: normalizeName(f.name),
             size: f.size || 0,
             uploadedAt: f.uploaded_at,
             publicUrl: f.storage_url,
@@ -51,7 +53,7 @@ export async function GET(request: Request) {
           const { data: publicData } = supabase.storage.from(BUCKET).getPublicUrl(fullPath);
           files.push({
             path: fullPath,
-            name: item.name,
+            name: normalizeName(item.name),
             size: item.metadata?.size ?? 0,
             uploadedAt: item.created_at,
             publicUrl: publicData.publicUrl,
@@ -68,7 +70,7 @@ export async function GET(request: Request) {
       blobs.forEach((blob) => {
         files.push({
           path: blob.pathname,
-          name: blob.pathname.split("/").pop() || blob.pathname,
+          name: normalizeName(blob.pathname.split("/").pop() || blob.pathname),
           size: blob.size || 0,
           uploadedAt: blob.uploadedAt || undefined,
           publicUrl: blob.url,

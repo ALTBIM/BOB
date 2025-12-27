@@ -41,10 +41,11 @@ export const uploadIfcFile = async (file: File, projectId: string) => {
     return null;
   }
 
-  const path = `${projectId}/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+  const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+  const path = `${projectId}/${safeName}`;
   const { error } = await client.storage.from(IFC_BUCKET).upload(path, file, {
     cacheControl: "3600",
-    upsert: false,
+    upsert: true,
     contentType: file.type || "application/octet-stream",
   });
   if (error) {
@@ -62,15 +63,15 @@ export const listIfcFiles = async (projectId: string) => {
     const res = await fetch(url, { method: "GET", cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
-      return (data.files || []).map((item: any) => ({
-        id: item.id || item.path,
-        name: item.name,
-        size: item.size || 0,
-        path: item.path,
-        publicUrl: item.publicUrl,
-        uploadedAt: item.uploadedAt,
-        provider: item.provider,
-        fileId: item.id,
+    return (data.files || []).map((item: any) => ({
+      id: item.id || item.path,
+      name: item.name?.replace(/^\d{10,}-/, "") || item.name,
+      size: item.size || 0,
+      path: item.path,
+      publicUrl: item.publicUrl,
+      uploadedAt: item.uploadedAt,
+      provider: item.provider,
+      fileId: item.id,
       }));
     }
   } catch (err) {
@@ -91,7 +92,7 @@ export const listIfcFiles = async (projectId: string) => {
       const { data: publicData } = client.storage.from(IFC_BUCKET).getPublicUrl(fullPath);
       return {
         id: fullPath,
-        name: item.name,
+        name: item.name.replace(/^\d{10,}-/, ""),
         size: item.metadata?.size ?? 0,
         path: fullPath,
         publicUrl: publicData.publicUrl,
