@@ -11,6 +11,19 @@ const parseVersion = (name: string) => {
   const clean = name.replace(/__v\d+(?=\.|$)/, "");
   return { clean, version };
 };
+const detectCategoryFromName = (name: string) => {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".ifc") || lower.endsWith(".ifczip")) return "ifc";
+  if (lower.endsWith(".pdf")) return "pdf";
+  if (lower.endsWith(".doc") || lower.endsWith(".docx") || lower.endsWith(".rtf") || lower.endsWith(".txt") || lower.endsWith(".md")) {
+    return "document";
+  }
+  if (lower.endsWith(".xls") || lower.endsWith(".xlsx") || lower.endsWith(".csv")) return "spreadsheet";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".gif") || lower.endsWith(".webp") || lower.endsWith(".heic")) {
+    return "image";
+  }
+  return "other";
+};
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -36,9 +49,7 @@ export async function GET(request: Request) {
       dbFiles.forEach((f: any) => {
         if (f?.path) dbPaths.add(f.path);
         if (!includeArchived && f.metadata?.archived) return;
-        const nameLower = String(f.name || "").toLowerCase();
-        const fallbackCategory =
-          nameLower.endsWith(".ifc") || nameLower.endsWith(".ifczip") ? "ifc" : "other";
+        const fallbackCategory = detectCategoryFromName(String(f.name || ""));
         files.push({
           id: f.id,
           name: f.name,
@@ -72,9 +83,7 @@ export async function GET(request: Request) {
           const { data: publicData } = supabase.storage.from(FILE_BUCKET).getPublicUrl(fullPath);
           const parsed = parseVersion(item.name);
           if (!files.find((f) => f.path === fullPath)) {
-            const lower = parsed.clean.toLowerCase();
-            const fallbackCategory =
-              lower.endsWith(".ifc") || lower.endsWith(".ifczip") ? "ifc" : "unknown";
+            const fallbackCategory = detectCategoryFromName(parsed.clean);
             files.push({
               id: fullPath,
               name: parsed.clean,
