@@ -270,7 +270,7 @@ function FileGrid({ files, onPreview }: { files: FileItem[]; onPreview: (f: File
             <span className="font-medium">{file.name}</span>
           </div>
             <div className="text-xs text-slate-500">
-              v{file.version || 1} \u2022 {formatDateTime(file.uploadedAt)}
+              v{file.version || 1} - {formatDateTime(file.uploadedAt)}
             </div>
             {file.hasText && (
               <div className="text-[11px] text-emerald-700">Tekst ekstrahert for chat/krav</div>
