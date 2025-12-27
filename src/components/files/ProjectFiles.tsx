@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Upload, FileText, Image, FileType, FilePlus, Folder, Download, Eye, Search } from "lucide-react";
+import { Upload, FileText, Image, FileType, FilePlus, Folder, Download, Eye, Search, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { listAllFiles, uploadGenericFile } from "@/lib/storage";
 
 interface ProjectFilesProps {
@@ -57,6 +58,7 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [activeCategory, setActiveCategory] = useState<Category | "all">("all");
   const [showArchived, setShowArchived] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
   const [previewText, setPreviewText] = useState<{
     content?: string;
@@ -88,6 +90,64 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
       (f.category || "").toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
+
+  useEffect(() => {
+    const filteredIds = new Set(filtered.map((f) => f.id));
+    setSelectedIds((prev) => new Set(Array.from(prev).filter((id) => filteredIds.has(id))));
+  }, [filtered]);
+
+  const handleToggleSelect = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(filtered.map((f) => f.id)));
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    const confirmDelete = window.confirm(
+      `Vil du slette ${selectedIds.size} fil(er)? Dette kan ikke angres.`
+    );
+    if (!confirmDelete) return;
+
+    const selected = files.filter((f) => selectedIds.has(f.id));
+    const payload = {
+      fileIds: selected.map((f) => f.id),
+      paths: selected.map((f) => f.path).filter(Boolean),
+      projectId: selectedProject,
+    };
+
+    try {
+      const res = await fetch("/api/files/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        alert(`Sletting feilet: ${text}`);
+        return;
+      }
+      setFiles((prev) => prev.filter((f) => !selectedIds.has(f.id)));
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error("Sletting feilet", err);
+      alert("Sletting feilet");
+    }
+  };
 
   const loadTextForFile = async (file: FileItem) => {
     if (!file.id || !file.hasText) {
@@ -223,6 +283,25 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
               Vis arkiv
             </label>
           </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="select-all-files"
+              checked={filtered.length > 0 && selectedIds.size === filtered.length}
+              onCheckedChange={(checked) => handleToggleSelectAll(Boolean(checked))}
+            />
+            <label htmlFor="select-all-files" className="text-sm text-slate-600">
+              Velg alle
+            </label>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={selectedIds.size === 0}
+            onClick={handleDeleteSelected}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Slett valgte
+          </Button>
         </div>
 
         <Tabs value={activeCategory} onValueChange={(val) => setActiveCategory(val as Category | "all")}>
@@ -237,7 +316,12 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
           </TabsList>
 
           <TabsContent value={activeCategory} className="space-y-3">
-            <FileGrid files={filtered} onPreview={setPreviewFile} />
+            <FileGrid
+              files={filtered}
+              onPreview={setPreviewFile}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+            />
           </TabsContent>
         </Tabs>
 
@@ -259,22 +343,38 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
   );
 }
 
-function FileGrid({ files, onPreview }: { files: FileItem[]; onPreview: (f: FileItem) => void }) {
+function FileGrid({
+  files,
+  onPreview,
+  selectedIds,
+  onToggleSelect,
+}: {
+  files: FileItem[];
+  onPreview: (f: FileItem) => void;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string, checked: boolean) => void;
+}) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {files.map((file) => (
-        <div key={file.id} className="border rounded-lg p-3 flex items-center justify-between">
-          <div>
-          <div className="flex items-center space-x-2">
-            {categoryIcons[(file.category as Category) || "unknown"]}
-            <span className="font-medium">{file.name}</span>
-          </div>
-            <div className="text-xs text-slate-500">
-              v{file.version || 1} - {formatDateTime(file.uploadedAt)}
+        <div key={file.id} className="border rounded-lg p-3 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              checked={selectedIds.has(file.id)}
+              onCheckedChange={(checked) => onToggleSelect(file.id, Boolean(checked))}
+            />
+            <div>
+              <div className="flex items-center space-x-2">
+                {categoryIcons[(file.category as Category) || "unknown"]}
+                <span className="font-medium">{file.name}</span>
+              </div>
+              <div className="text-xs text-slate-500">
+                v{file.version || 1} - {formatDateTime(file.uploadedAt)}
+              </div>
+              {file.hasText && (
+                <div className="text-[11px] text-emerald-700">Tekst ekstrahert for chat/krav</div>
+              )}
             </div>
-            {file.hasText && (
-              <div className="text-[11px] text-emerald-700">Tekst ekstrahert for chat/krav</div>
-            )}
           </div>
           <div className="flex items-center space-x-2">
             <Badge variant="secondary">{categoryLabels[(file.category as Category) || "unknown"]}</Badge>
