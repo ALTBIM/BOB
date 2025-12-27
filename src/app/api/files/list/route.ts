@@ -36,6 +36,9 @@ export async function GET(request: Request) {
       dbFiles.forEach((f: any) => {
         if (f?.path) dbPaths.add(f.path);
         if (!includeArchived && f.metadata?.archived) return;
+        const nameLower = String(f.name || "").toLowerCase();
+        const fallbackCategory =
+          nameLower.endsWith(".ifc") || nameLower.endsWith(".ifczip") ? "ifc" : "other";
         files.push({
           id: f.id,
           name: f.name,
@@ -44,7 +47,7 @@ export async function GET(request: Request) {
           publicUrl: f.storage_url,
           uploadedAt: f.uploaded_at,
           projectId: f.project_id,
-          category: f.metadata?.category || "other",
+          category: f.metadata?.category || fallbackCategory,
           type: f.type,
           hasText: Boolean(f.metadata?.hasText),
           version: Number(f.metadata?.version) || 1,
@@ -69,6 +72,9 @@ export async function GET(request: Request) {
           const { data: publicData } = supabase.storage.from(FILE_BUCKET).getPublicUrl(fullPath);
           const parsed = parseVersion(item.name);
           if (!files.find((f) => f.path === fullPath)) {
+            const lower = parsed.clean.toLowerCase();
+            const fallbackCategory =
+              lower.endsWith(".ifc") || lower.endsWith(".ifczip") ? "ifc" : "unknown";
             files.push({
               id: fullPath,
               name: parsed.clean,
@@ -77,7 +83,7 @@ export async function GET(request: Request) {
               publicUrl: publicData.publicUrl,
               uploadedAt: item.created_at,
               projectId: projectId || "unknown",
-              category: "unknown",
+              category: fallbackCategory,
               type: "application/octet-stream",
               version: parsed.version,
               archived: false,

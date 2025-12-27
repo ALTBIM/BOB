@@ -44,6 +44,7 @@ const persistRecord = async (params: {
       uploaded_by: uploadedBy,
       uploaded_at: uploadedAt,
       metadata: {
+        category: "ifc",
         version,
         archived: false,
         originalName: file.name,

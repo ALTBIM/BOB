@@ -269,9 +269,9 @@ function FileGrid({ files, onPreview }: { files: FileItem[]; onPreview: (f: File
             {categoryIcons[(file.category as Category) || "unknown"]}
             <span className="font-medium">{file.name}</span>
           </div>
-          <div className="text-xs text-slate-500">
-            v{file.version || 1} \u2022 {formatDate(file.uploadedAt)} \u2022 {formatBytes(file.size)}
-          </div>
+            <div className="text-xs text-slate-500">
+              v{file.version || 1} \u2022 {formatDateTime(file.uploadedAt)}
+            </div>
             {file.hasText && (
               <div className="text-[11px] text-emerald-700">Tekst ekstrahert for chat/krav</div>
             )}
@@ -303,12 +303,14 @@ function formatBytes(bytes: number) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
-function formatDate(dateString?: string) {
+function formatDateTime(dateString?: string) {
   if (!dateString) return "";
-  return new Date(dateString).toLocaleDateString("no-NO", {
+  return new Date(dateString).toLocaleString("no-NO", {
     year: "numeric",
     month: "short",
     day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
