@@ -61,6 +61,8 @@ interface ModelFile {
   provider?: string;
   path?: string;
   elementSummary?: IFCElementSummary[];
+  version?: number;
+  archived?: boolean;
 }
 
 export default function ProductionDashboard({ selectedProject }: ProductionDashboardProps) {
@@ -216,6 +218,8 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         uploadedBy: "Supabase",
         fileUrl: item.publicUrl,
         storageUrl: item.publicUrl,
+        version: item.version,
+        archived: item.archived,
       }));
       setExistingFiles(storedFiles);
       setSupabaseFiles(storedFiles);
@@ -239,7 +243,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         uploadedBy: "Supabase",
         uploadedAt: item.uploadedAt || new Date().toISOString(),
         status: "completed",
-        version: 1,
+        version: item.version || 1,
         storageUrl: item.publicUrl,
       }));
 
@@ -1152,7 +1156,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
                         <div>
                           <p className="font-medium">{file.name}</p>
                           <p className="text-xs text-slate-500">
-                            {file.provider || "supabase"} · {file.uploadedAt ? formatDate(file.uploadedAt) : "nylig"}
+                            {file.provider || "supabase"} \u2022 v{file.version || 1} \u2022 {file.uploadedAt ? formatDate(file.uploadedAt) : "nylig"}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1188,6 +1192,7 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     </div>
   );
 }
+
 
 
 

@@ -1,4 +1,4 @@
-export const runtime = "nodejs";
+﻿export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -9,6 +9,14 @@ const FILE_BUCKET =
   "ifc-models";
 
 const MAX_SIZE_MB = 500;
+const sanitizeFilename = (filename: string) => filename.replace(/[^\w.\-]+/g, "_");
+const splitName = (filename: string) => {
+  const lastDot = filename.lastIndexOf(".");
+  if (lastDot === -1) {
+    return { stem: filename, ext: "" };
+  }
+  return { stem: filename.slice(0, lastDot), ext: filename.slice(lastDot + 1) };
+};
 
 type ExtractedText = {
   text: string;
@@ -33,7 +41,7 @@ const extractRequirements = (text: string) => {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const reqs: string[] = [];
   for (const line of lines) {
-    if (/^[-*•]/.test(line) || /^\d+[\.\)]/.test(line) || /\b(skal|må|must|shall)\b/i.test(line)) {
+    if (/^[-*\u2022]/.test(line) || /^\d+[\.\)]/.test(line) || /\b(skal|m\u00e5|must|shall)\b/i.test(line)) {
       reqs.push(line);
     }
     if (reqs.length >= 200) break;
@@ -99,7 +107,28 @@ export async function POST(request: Request) {
   }
 
   const ext = file.name.split(".").pop()?.toLowerCase() || "dat";
-  const path = `${projectId}/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+  const safeName = sanitizeFilename(file.name);
+  const nameParts = splitName(safeName);
+  let existing: Array<{ id: string; metadata?: Record<string, any> | null }> = [];
+  let version = 1;
+  if (supabase) {
+    const { data } = await supabase
+      .from("files")
+      .select("id, metadata")
+      .eq("project_id", projectId)
+      .eq("name", file.name)
+      .eq("type", file.type || "application/octet-stream");
+    if (data) {
+      existing = data as Array<{ id: string; metadata?: Record<string, any> | null }>;
+      const maxVersion = existing.reduce((max, row) => {
+        const v = Number(row.metadata?.version) || 1;
+        return v > max ? v : max;
+      }, 0);
+      version = maxVersion + 1;
+    }
+  }
+  const versionSuffix = `__v${version}`;
+  const path = `${projectId}/${nameParts.stem}${versionSuffix}${nameParts.ext ? `.${nameParts.ext}` : ""}`;
   const category = detectCategory(file.name, file.type || "");
 
   const textResult = ["pdf", "document"].includes(category) ? await extractTextFromFile(file, category) : null;
@@ -138,6 +167,9 @@ export async function POST(request: Request) {
             wordCount: textResult?.wordCount,
             pageCount: textResult?.pageCount,
             hasText: Boolean(textResult?.text),
+            version,
+            archived: false,
+            originalName: file.name,
           },
         },
         { onConflict: "path" }
@@ -148,6 +180,13 @@ export async function POST(request: Request) {
       console.warn("Kunne ikke lagre metadata i files-tabellen", fileError);
     }
 
+    if (fileRow?.id && existing.length) {
+      const previous = existing.filter((row) => row.id !== fileRow.id);
+      for (const row of previous) {
+        const merged = { ...(row.metadata || {}), archived: true };
+        await supabase.from("files").update({ metadata: merged }).eq("id", row.id);
+      }
+    }
     if (fileRow?.id && textResult?.text) {
       const trimmed = textResult.text.slice(0, 200_000);
       try {
@@ -190,6 +229,7 @@ export async function POST(request: Request) {
       fileId: fileRow?.id,
       category,
       hasText: Boolean(textResult?.text),
+      version,
     });
   } catch (err) {
     console.warn("Metadata-lagring feilet", err);
@@ -199,6 +239,7 @@ export async function POST(request: Request) {
       provider: "supabase",
       category,
       hasText: Boolean(textResult?.text),
+      version,
     });
   }
 }

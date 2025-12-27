@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { processIfcBuffer } from "@/lib/ifc-processor";
@@ -6,6 +6,14 @@ import { processIfcBuffer } from "@/lib/ifc-processor";
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_IFC_BUCKET || "ifc-models";
 const MAX_SIZE_MB = 500;
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN || process.env.NEXT_PUBLIC_BLOB_READ_WRITE_TOKEN || "";
+const sanitizeFilename = (filename: string) => filename.replace(/[^\w.\-]+/g, "_");
+const splitName = (filename: string) => {
+  const lastDot = filename.lastIndexOf(".");
+  if (lastDot === -1) {
+    return { stem: filename, ext: "" };
+  }
+  return { stem: filename.slice(0, lastDot), ext: filename.slice(lastDot + 1) };
+};
 
 const persistRecord = async (params: {
   projectId: string;
@@ -13,11 +21,13 @@ const persistRecord = async (params: {
   storageUrl: string;
   file: File;
   provider: string;
+  version: number;
+  previous: Array<{ id: string; metadata?: Record<string, any> | null }>;
 }) => {
   const supabase = getSupabaseServerClient();
   if (!supabase) return { fileId: undefined, modelId: undefined };
 
-  const { projectId, path, storageUrl, file, provider } = params;
+  const { projectId, path, storageUrl, file, provider, version, previous } = params;
   const uploadedAt = new Date().toISOString();
   const uploadedBy = "system";
 
@@ -33,6 +43,12 @@ const persistRecord = async (params: {
       source_provider: provider,
       uploaded_by: uploadedBy,
       uploaded_at: uploadedAt,
+      metadata: {
+        version,
+        archived: false,
+        originalName: file.name,
+        ext: splitName(file.name).ext,
+      },
     };
 
     const { data: fileRow, error: fileError } = await supabase
@@ -42,13 +58,21 @@ const persistRecord = async (params: {
       .single();
     if (fileError) throw fileError;
 
+    if (previous.length) {
+      const previousRows = previous.filter((row) => row.id !== fileRow?.id);
+      for (const row of previousRows) {
+        const merged = { ...(row.metadata || {}), archived: true };
+        await supabase.from("files").update({ metadata: merged }).eq("id", row.id);
+      }
+    }
+
     const { data: modelRow, error: modelError } = await supabase
       .from("ifc_models")
       .upsert(
         {
           project_id: projectId,
           file_id: fileRow?.id,
-          version: 1,
+          version,
           status: "completed",
           storage_url: storageUrl,
           uploaded_at: uploadedAt,
@@ -88,11 +112,30 @@ export async function POST(request: Request) {
 
   const ext = file.name.split(".").pop() || "ifc";
   if (!["ifc", "ifczip"].includes(ext.toLowerCase())) {
-    return NextResponse.json({ error: "Kun .ifc eller .ifczip er stottet" }, { status: 400 });
+    return NextResponse.json({ error: "Kun .ifc eller .ifczip er støttet" }, { status: 400 });
   }
 
-  const safeName = file.name.replace(/[^\w.\-]+/g, "_");
-  const path = `${projectId}/${safeName}`;
+  const safeName = sanitizeFilename(file.name);
+  const nameParts = splitName(safeName);
+  let previous: Array<{ id: string; metadata?: Record<string, any> | null }> = [];
+  let version = 1;
+  if (supabase) {
+    const { data } = await supabase
+      .from("files")
+      .select("id, metadata")
+      .eq("project_id", projectId)
+      .eq("name", file.name)
+      .eq("type", file.type || "application/octet-stream");
+    if (data) {
+      previous = data as Array<{ id: string; metadata?: Record<string, any> | null }>;
+      const maxVersion = previous.reduce((max, row) => {
+        const v = Number(row.metadata?.version) || 1;
+        return v > max ? v : max;
+      }, 0);
+      version = maxVersion + 1;
+    }
+  }
+  const path = `${projectId}/${nameParts.stem}__v${version}${nameParts.ext ? `.${nameParts.ext}` : ""}`;
   const buffer = new Uint8Array(await file.arrayBuffer());
 
   // Try Supabase first if configured
@@ -111,6 +154,8 @@ export async function POST(request: Request) {
         storageUrl: publicData.publicUrl,
         file,
         provider: "supabase",
+        version,
+        previous,
       });
       const modelId = persisted.modelId || path;
       try {
@@ -124,6 +169,7 @@ export async function POST(request: Request) {
         provider: "supabase",
         fileId: persisted.fileId,
         modelId,
+        version,
       });
     }
 
@@ -145,6 +191,8 @@ export async function POST(request: Request) {
         storageUrl: blob.url,
         file,
         provider: "vercel-blob",
+        version,
+        previous,
       });
       const modelId = persisted.modelId || blob.pathname || path;
       try {
@@ -158,6 +206,7 @@ export async function POST(request: Request) {
         provider: "vercel-blob",
         fileId: persisted.fileId,
         modelId,
+        version,
       });
     } catch (err) {
       console.error("Vercel Blob upload error", err);
@@ -165,5 +214,6 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ error: "Ingen lagringslosning er konfigurert" }, { status: 500 });
+  return NextResponse.json({ error: "Ingen lagringsløsning er konfigurert" }, { status: 500 });
 }
+

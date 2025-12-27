@@ -30,6 +30,7 @@ export const uploadIfcFile = async (file: File, projectId: string) => {
         provider: data.provider as string,
         fileId: data.fileId as string | undefined,
         modelId: data.modelId as string | undefined,
+        version: data.version as number | undefined,
       };
     } catch (err) {
       console.warn("API upload feilet", err);
@@ -56,22 +57,26 @@ export const uploadIfcFile = async (file: File, projectId: string) => {
   return { path, publicUrl: data.publicUrl, provider: "supabase", fileId: undefined, modelId: undefined };
 };
 
-export const listIfcFiles = async (projectId: string) => {
+export const listIfcFiles = async (projectId: string, includeArchived = false) => {
   // Use server API (handles Supabase service key or Vercel Blob)
   try {
-    const url = projectId ? `/api/ifc/list?projectId=${encodeURIComponent(projectId)}` : `/api/ifc/list`;
+    const url = projectId
+      ? `/api/ifc/list?projectId=${encodeURIComponent(projectId)}&includeArchived=${includeArchived ? "1" : "0"}`
+      : `/api/ifc/list?includeArchived=${includeArchived ? "1" : "0"}`;
     const res = await fetch(url, { method: "GET", cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
-    return (data.files || []).map((item: any) => ({
-      id: item.id || item.path,
-      name: item.name?.replace(/^\d{10,}-/, "") || item.name,
-      size: item.size || 0,
-      path: item.path,
-      publicUrl: item.publicUrl,
-      uploadedAt: item.uploadedAt,
-      provider: item.provider,
-      fileId: item.id,
+      return (data.files || []).map((item: any) => ({
+        id: item.id || item.path,
+        name: item.name?.replace(/^\d{10,}-/, "") || item.name,
+        size: item.size || 0,
+        path: item.path,
+        publicUrl: item.publicUrl,
+        uploadedAt: item.uploadedAt,
+        provider: item.provider,
+        fileId: item.id,
+        version: item.version,
+        archived: item.archived,
       }));
     }
   } catch (err) {
@@ -99,6 +104,8 @@ export const listIfcFiles = async (projectId: string) => {
         uploadedAt: item.created_at,
         provider: "supabase",
         fileId: undefined,
+        version: 1,
+        archived: false,
       };
     });
 };
@@ -124,6 +131,7 @@ export const uploadGenericFile = async (file: File, projectId: string, descripti
         fileId: data.fileId as string | undefined,
         category: data.category as string | undefined,
         hasText: data.hasText as boolean | undefined,
+        version: data.version as number | undefined,
       };
     } catch (err) {
       console.warn("API generic upload feilet", err);
@@ -149,10 +157,12 @@ export const uploadGenericFile = async (file: File, projectId: string, descripti
   return { path, publicUrl: data.publicUrl, provider: "supabase", fileId: undefined, category: undefined };
 };
 
-export const listAllFiles = async (projectId: string) => {
+export const listAllFiles = async (projectId: string, includeArchived = false) => {
   // Server API handles Supabase service key; falls back to anon storage
   try {
-    const url = projectId ? `/api/files/list?projectId=${encodeURIComponent(projectId)}` : `/api/files/list`;
+    const url = projectId
+      ? `/api/files/list?projectId=${encodeURIComponent(projectId)}&includeArchived=${includeArchived ? "1" : "0"}`
+      : `/api/files/list?includeArchived=${includeArchived ? "1" : "0"}`;
     const res = await fetch(url, { method: "GET", cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
@@ -170,6 +180,8 @@ export const listAllFiles = async (projectId: string) => {
         projectId: item.projectId,
         uploadedBy: item.uploadedBy,
         hasText: item.hasText,
+        version: item.version,
+        archived: item.archived,
       }));
     }
   } catch (err) {
@@ -197,6 +209,8 @@ export const listAllFiles = async (projectId: string) => {
         type: "application/octet-stream",
         category: "unknown",
         projectId,
+        version: 1,
+        archived: false,
       };
     });
 };

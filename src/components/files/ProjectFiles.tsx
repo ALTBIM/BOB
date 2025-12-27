@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +28,8 @@ interface FileItem {
   category?: Category;
   projectId?: string;
   hasText?: boolean;
+  version?: number;
+  archived?: boolean;
 }
 
 const categoryLabels: Record<Category, string> = {
@@ -54,6 +56,7 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [activeCategory, setActiveCategory] = useState<Category | "all">("all");
+  const [showArchived, setShowArchived] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
   const [previewText, setPreviewText] = useState<{
     content?: string;
@@ -70,13 +73,14 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
       return;
     }
     const load = async () => {
-      const data = await listAllFiles(selectedProject);
+      const data = await listAllFiles(selectedProject, showArchived);
       setFiles(data as FileItem[]);
     };
     load();
-  }, [selectedProject]);
+  }, [selectedProject, showArchived]);
 
   const filtered = files.filter((f) => {
+    if (!showArchived && f.archived) return false;
     const matchesCategory = activeCategory === "all" || f.category === activeCategory;
     const matchesSearch =
       !searchTerm ||
@@ -115,23 +119,47 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
     try {
       const selected = Array.from(e.target.files);
       for (const f of selected) {
+        const hasActive = files.some(
+          (file) =>
+            file.name.toLowerCase() === f.name.toLowerCase() &&
+            (file.type || "") === (f.type || "") &&
+            !file.archived
+        );
+        if (hasActive) {
+          const confirmReplace = window.confirm(
+            `Det finnes allerede en fil med navnet "${f.name}". Vil du laste opp en ny versjon? Den gamle flyttes til arkiv.`
+          );
+          if (!confirmReplace) continue;
+        }
         const res = await uploadGenericFile(f, selectedProject);
         if (res?.publicUrl) {
-          setFiles((prev) => [
-            {
-              id: res.fileId || res.path,
-              name: f.name,
-              size: f.size,
-              path: res.path,
-              publicUrl: res.publicUrl,
-              uploadedAt: new Date().toISOString(),
-              category: (res.category as Category) || "other",
-              type: f.type,
-              projectId: selectedProject,
-              hasText: res.hasText,
-            },
-            ...prev,
-          ]);
+          const newFile: FileItem = {
+            id: res.fileId || res.path,
+            name: f.name,
+            size: f.size,
+            path: res.path,
+            publicUrl: res.publicUrl,
+            uploadedAt: new Date().toISOString(),
+            category: (res.category as Category) || "other",
+            type: f.type,
+            projectId: selectedProject,
+            hasText: res.hasText,
+            version: res.version || 1,
+            archived: false,
+          };
+          setFiles((prev) => {
+            const updated = prev.map((file) => {
+              if (
+                file.name.toLowerCase() === f.name.toLowerCase() &&
+                (file.type || "") === (f.type || "") &&
+                !file.archived
+              ) {
+                return { ...file, archived: true };
+              }
+              return file;
+            });
+            return [newFile, ...updated];
+          });
         }
       }
     } catch (err) {
@@ -149,7 +177,7 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
         <CardContent className="text-center py-12">
           <Folder className="w-12 h-12 text-slate-400 mx-auto mb-4" />
           <h3 className="font-medium text-slate-900 mb-2">Ingen prosjekt valgt</h3>
-          <p className="text-slate-600">Velg et prosjekt for å se og laste opp filer</p>
+          <p className="text-slate-600">Velg et prosjekt for \u00e5 se og laste opp filer</p>
         </CardContent>
       </Card>
     );
@@ -180,9 +208,20 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
             <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Søk i filnavn eller kategori..."
+              placeholder="S\u00f8k i filnavn eller kategori..."
               className="pl-9"
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="show-archived"
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />
+            <label htmlFor="show-archived" className="text-sm text-slate-600">
+              Vis arkiv
+            </label>
           </div>
         </div>
 
@@ -226,20 +265,23 @@ function FileGrid({ files, onPreview }: { files: FileItem[]; onPreview: (f: File
       {files.map((file) => (
         <div key={file.id} className="border rounded-lg p-3 flex items-center justify-between">
           <div>
-            <div className="flex items-center space-x-2">
-              {categoryIcons[(file.category as Category) || "unknown"]}
-              <span className="font-medium">{file.name}</span>
-            </div>
-            <div className="text-xs text-slate-500">{formatBytes(file.size)}</div>
+          <div className="flex items-center space-x-2">
+            {categoryIcons[(file.category as Category) || "unknown"]}
+            <span className="font-medium">{file.name}</span>
+          </div>
+          <div className="text-xs text-slate-500">
+            v{file.version || 1} \u2022 {formatDate(file.uploadedAt)} \u2022 {formatBytes(file.size)}
+          </div>
             {file.hasText && (
               <div className="text-[11px] text-emerald-700">Tekst ekstrahert for chat/krav</div>
             )}
           </div>
           <div className="flex items-center space-x-2">
             <Badge variant="secondary">{categoryLabels[(file.category as Category) || "unknown"]}</Badge>
+            {file.archived && <Badge variant="outline">Arkiv</Badge>}
             <Button variant="outline" size="sm" onClick={() => onPreview(file)}>
               <Eye className="w-4 h-4 mr-1" />
-              Apne
+              \u00c5pne
             </Button>
             <Button variant="ghost" size="sm" asChild>
               <a href={file.publicUrl} target="_blank" rel="noreferrer">
@@ -259,6 +301,15 @@ function formatBytes(bytes: number) {
   const sizes = ["Bytes", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
+function formatDate(dateString?: string) {
+  if (!dateString) return "";
+  return new Date(dateString).toLocaleDateString("no-NO", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function PreviewBody({
@@ -310,7 +361,7 @@ function PreviewBody({
     return (
       <div className="space-y-3">
         <p className="text-sm text-slate-600">
-          Forhandsvisning stottes ikke for denne filtypen. Bruk nedlasting for a apne lokalt.
+          Forh\u00e5ndsvisning st\u00f8ttes ikke for denne filtypen. Bruk nedlasting for \u00e5 \u00e5pne lokalt.
         </p>
         <Button asChild>
           <a href={file.publicUrl} target="_blank" rel="noreferrer">
@@ -359,4 +410,19 @@ function PreviewBody({
   }
   return null;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

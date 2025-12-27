@@ -14,9 +14,7 @@ import {
   AlertCircle,
   X,
   Building2,
-  Calendar,
   Eye,
-  Trash2,
   Download,
   User
 } from "lucide-react";
@@ -40,6 +38,7 @@ interface ModelFile {
   objects?: number;
   zones?: number;
   materials?: number;
+  materialList?: string[];
   projectId: string;
   uploadedAt: string;
   uploadedBy: string;
@@ -51,6 +50,8 @@ interface ModelFile {
   storageUrl?: string;
   rawFile?: File;
   elementSummary?: IFCElementSummary[];
+  version?: number;
+  archived?: boolean;
 }
 
 export default function ModelUpload({ selectedProject }: ModelUploadProps) {
@@ -58,6 +59,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
   const [existingFiles, setExistingFiles] = useState<ModelFile[]>([]);
   const [isUploadingDocs, setIsUploadingDocs] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -68,7 +70,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
     const loadExisting = async () => {
       try {
         // Hent alle filer (ikke bare IFC) for å bruke denne fanen som en enkel dokumentoversikt inntil dedikert side finnes
-        const allFiles = await listAllFiles(selectedProject);
+        const allFiles = await listAllFiles(selectedProject, showArchived);
         const mapped: ModelFile[] = allFiles.map((item) => ({
           id: item.id || item.path,
           name: item.name,
@@ -84,6 +86,8 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
           storageUrl: item.publicUrl,
           fileUrl: item.publicUrl,
           fileId: item.fileId,
+          version: item.version,
+          archived: item.archived,
         }));
 
         const merged = new Map<string, ModelFile>();
@@ -97,7 +101,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
     };
 
     loadExisting();
-  }, [selectedProject]);
+  }, [selectedProject, showArchived]);
 
   const processFiles = (fileList: File[]) => {
     if (!selectedProject) {
@@ -114,7 +118,20 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
       return;
     }
 
-    const newFiles: ModelFile[] = validFiles.map((file) => {
+    const confirmedFiles = validFiles.filter((file) => {
+      const hasActive = existingFiles.some(
+        (existing) =>
+          existing.name.toLowerCase() === file.name.toLowerCase() &&
+          (existing.type || "") === (file.type || "") &&
+          !existing.archived
+      );
+      if (!hasActive) return true;
+      return window.confirm(
+        `Det finnes allerede en fil med navnet "${file.name}". Vil du laste opp en ny versjon? Den gamle flyttes til arkiv.`
+      );
+    });
+
+    const newFiles: ModelFile[] = confirmedFiles.map((file) => {
       const objectUrl = URL.createObjectURL(file);
       return {
         id: `file-${Date.now()}-${Math.random()}`,
@@ -202,10 +219,14 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
   const persistModelToStore = async (file: ModelFile, materials: string[]) => {
     try {
       let storageUrl = file.storageUrl;
+      let nextVersion = file.version || 1;
       if (file.rawFile) {
         const uploaded = await uploadIfcFile(file.rawFile, file.projectId);
         storageUrl = uploaded?.publicUrl || storageUrl;
-        if (uploaded?.fileId || uploaded?.modelId || uploaded?.provider) {
+        if (uploaded?.version) {
+          nextVersion = uploaded.version;
+        }
+        if (uploaded?.fileId || uploaded?.modelId || uploaded?.provider || uploaded?.version) {
           setFiles((prev) =>
             prev.map((f) =>
               f.id === file.id
@@ -214,6 +235,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                     fileId: uploaded.fileId || f.fileId,
                     modelId: uploaded.modelId || f.modelId,
                     provider: uploaded.provider || f.provider,
+                    version: uploaded.version || f.version,
                   }
                 : f
             )
@@ -239,10 +261,19 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
           )
         );
         setExistingFiles((prev) => {
-          const exists = prev.find((f) => f.id === file.id);
+          const updated = prev.map((f) => {
+            const sameName =
+              f.name.toLowerCase() === file.name.toLowerCase() &&
+              (f.type || "") === (file.type || "");
+            if (sameName && f.id !== file.id && !f.archived) {
+              return { ...f, archived: true };
+            }
+            return f;
+          });
+          const exists = updated.find((f) => f.id === file.id);
           if (!exists) {
             return [
-              ...prev,
+              ...updated,
               {
                 ...file,
                 storageUrl,
@@ -250,10 +281,12 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                 fileId: file.fileId,
                 modelId: file.modelId,
                 provider: file.provider,
+                version: nextVersion,
+                archived: false,
               },
             ];
           }
-          return prev.map((f) =>
+          return updated.map((f) =>
             f.id === file.id
               ? {
                   ...f,
@@ -262,6 +295,8 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                   fileId: f.fileId || file.fileId,
                   modelId: f.modelId || file.modelId,
                   provider: f.provider || file.provider,
+                  version: nextVersion,
+                  archived: false,
                 }
               : f
           );
@@ -332,6 +367,18 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
     setIsUploadingDocs(true);
     try {
       for (const f of selected) {
+        const hasActive = existingFiles.some(
+          (existing) =>
+            existing.name.toLowerCase() === f.name.toLowerCase() &&
+            (existing.type || "") === (f.type || "") &&
+            !existing.archived
+        );
+        if (hasActive) {
+          const confirmReplace = window.confirm(
+            `Det finnes allerede en fil med navnet "${f.name}". Vil du laste opp en ny versjon? Den gamle flyttes til arkiv.`
+          );
+          if (!confirmReplace) continue;
+        }
         const res = await uploadGenericFile(f, selectedProject);
         if (res?.publicUrl) {
           const newFile: ModelFile = {
@@ -348,8 +395,22 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
             fileUrl: res.publicUrl,
             fileId: res.fileId,
             category: res.category || "other",
+            version: res.version || 1,
+            archived: false,
           };
-          setExistingFiles((prev) => [...prev, newFile]);
+          setExistingFiles((prev) => {
+            const updated = prev.map((existing) => {
+              if (
+                existing.name.toLowerCase() === f.name.toLowerCase() &&
+                (existing.type || "") === (f.type || "") &&
+                !existing.archived
+              ) {
+                return { ...existing, archived: true };
+              }
+              return existing;
+            });
+            return [newFile, ...updated];
+          });
         }
       }
     } catch (err) {
@@ -380,8 +441,14 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
   };
 
   const getProjectFiles = () => {
-    return existingFiles.filter((file) => (selectedProject ? file.projectId === selectedProject : true));
+    return existingFiles.filter((file) => {
+      if (selectedProject && file.projectId !== selectedProject) return false;
+      if (!showArchived && file.archived) return false;
+      return true;
+    });
   };
+
+  const visibleFiles = getProjectFiles().filter((file) => file.storageUrl);
 
   if (!selectedProject) {
     return (
@@ -533,10 +600,19 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
               <CardDescription>Opplastede IFC-modeller for dette prosjektet</CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="flex items-center gap-2 pb-2">
+                <input
+                  id="show-archived-bim"
+                  type="checkbox"
+                  checked={showArchived}
+                  onChange={(e) => setShowArchived(e.target.checked)}
+                />
+                <label htmlFor="show-archived-bim" className="text-sm text-slate-600">
+                  Vis arkiv
+                </label>
+              </div>
               <div className="space-y-4">
-                {getProjectFiles()
-                  .filter((file) => file.storageUrl)
-                  .map((file) => {
+                {visibleFiles.map((file) => {
                     const downloadUrl = file.storageUrl || file.fileUrl;
                     const viewerUrl = downloadUrl
                       ? `/app/viewer?projectId=${encodeURIComponent(selectedProject || "")}&url=${encodeURIComponent(downloadUrl)}`
@@ -550,15 +626,13 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                             </div>
                             <div>
                               <h4 className="font-medium">{file.name}</h4>
-                              <div className="flex items-center space-x-4 text-sm text-slate-500">
+                              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                                <span>v{file.version || 1}</span>
+                                <span>{formatDate(file.uploadedAt)}</span>
                                 <span>{formatFileSize(file.size)}</span>
                                 <span className="flex items-center">
                                   <User className="w-3 h-3 mr-1" />
                                   {file.uploadedBy}
-                                </span>
-                                <span className="flex items-center">
-                                  <Calendar className="w-3 h-3 mr-1" />
-                                  {formatDate(file.uploadedAt)}
                                 </span>
                               </div>
                             </div>
@@ -568,9 +642,10 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                             <Badge variant={file.status === "completed" ? "default" : "secondary"}>
                               {file.status === "completed" ? "Ferdig" : file.status}
                             </Badge>
+                            {file.archived && <Badge variant="outline">Arkiv</Badge>}
                             {viewerUrl && (
                               <Button variant="outline" size="sm" asChild>
-                                <a href={viewerUrl}  title="Åpne i xeokit-viewer">
+                                <a href={viewerUrl} title="Åpne i xeokit-viewer">
                                   <Eye className="w-4 h-4 mr-1" />
                                   Vis
                                 </a>
@@ -609,7 +684,7 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                     );
                   })}
 
-                {getProjectFiles().length === 0 && (
+                {visibleFiles.length === 0 && (
                   <div className="text-center py-8">
                     <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                     <h4 className="font-medium mb-2">Ingen modeller lastet opp</h4>
@@ -633,18 +708,16 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                 {isUploadingDocs && <span className="text-sm text-slate-500">Laster opp...</span>}
               </div>
               <div className="space-y-4">
-                {existingFiles.length === 0 && (
+                {visibleFiles.length === 0 && (
                   <div className="text-center py-8">
                     <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                     <h4 className="font-medium mb-2">Ingen filer</h4>
                     <p className="text-slate-500 mb-4">Last opp dokumenter, tegninger, krav eller IFC-filer.</p>
                   </div>
                 )}
-                {existingFiles.length > 0 && (
+                {visibleFiles.length > 0 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {existingFiles
-                      .filter((f) => f.storageUrl)
-                      .map((file) => (
+                    {visibleFiles.map((file) => (
                         <div key={file.id} className="border rounded-lg p-3 flex items-center justify-between">
                           <div>
                             <div className="flex items-center space-x-2">
@@ -652,11 +725,12 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
                               <span className="font-medium">{file.name}</span>
                             </div>
                             <div className="text-xs text-slate-500">
-                              {formatFileSize(file.size)} · {file.category || "ukjent"}
+                              v{file.version || 1} \u2022 {formatDate(file.uploadedAt)} \u2022 {formatFileSize(file.size)}
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
                             <Badge variant="secondary">{file.category || "fil"}</Badge>
+                            {file.archived && <Badge variant="outline">Arkiv</Badge>}
                             <Button variant="ghost" size="sm" asChild>
                               <a href={file.storageUrl} >
                                 <Download className="w-4 h-4" />
@@ -675,6 +749,15 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
 
 
 
