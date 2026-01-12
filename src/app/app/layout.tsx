@@ -22,17 +22,16 @@ import clsx from "clsx";
 import { Fragment, useEffect, useState, type ReactElement } from "react";
 
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTrigger } from "@/components/ui/sheet";
-import { useDeviceType } from "@/lib/hooks/use-device-type";
 
 const primaryNav = [
-  { name: "Dashboard", href: "/app", icon: LayoutDashboard },
+  { name: "BOB Chat", href: "/app/chat", icon: MessageCircle },
+  { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "BIM Modeller", href: "/app/models", icon: Box },
   { name: "Produksjon", href: "/app/production", icon: Wrench },
   { name: "Kontroller", href: "/app/controls", icon: ShieldCheck },
   { name: "Viewer", href: "/app/viewer", icon: Eye },
   { name: "Users", href: "/app/users", icon: Users },
   { name: "Admin", href: "/app/admin", icon: Settings },
-  { name: "BOB Chat", href: "/app/chat", icon: MessageCircle },
 ];
 
 const filesNav = [
@@ -52,14 +51,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [filesOpen, setFilesOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const deviceType = useDeviceType();
-  const isTouchView = deviceType !== "desktop";
   const [productionTab, setProductionTab] = useState<string | null>(null);
 
   const handleNavSelection = () => {
-    if (isTouchView) {
-      setMobileNavOpen(false);
-    }
+    setMobileNavOpen(false);
   };
 
   useEffect(() => {
@@ -90,12 +85,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       setMobileNavOpen(false);
     }
   }, [pathname]);
-
-  useEffect(() => {
-    if (!isTouchView && mobileNavOpen) {
-      setMobileNavOpen(false);
-    }
-  }, [isTouchView, mobileNavOpen]);
 
   const renderNavLinks = (onItemClick?: () => void, closeOnNavigate?: boolean) => (
     <nav className="flex-1 px-3 py-4 space-y-1">
@@ -205,67 +194,47 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-background text-foreground md:flex">
-      <aside className="hidden md:flex w-64 border-r border-border/70 bg-card flex-col">
-        <div className="px-5 py-4 border-b border-border/70">
-          <div className="text-lg font-semibold">BOB</div>
-          <p className="text-xs text-muted-foreground mt-1">BIM &amp; Operations</p>
+    <div className="min-h-screen bg-background text-foreground">
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <div className="fixed left-4 top-4 z-30">
+          <SheetTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-4 py-2 text-sm font-medium text-foreground backdrop-blur"
+            >
+              <Menu className="h-4 w-4" />
+              Meny
+            </button>
+          </SheetTrigger>
         </div>
-        {renderNavLinks()}
-        <div className="px-4 pb-4">
-          <div className="rounded-lg border border-border/70 bg-muted px-3 py-2">
-            <p className="text-xs text-muted-foreground">Prosjekt</p>
-            <p className="text-sm font-medium">Velg i headeren</p>
-          </div>
-        </div>
-      </aside>
-
-      <div className="flex-1">
-        <main className="relative">
-          {isTouchView && (
-            <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-              <div className="absolute left-4 top-4 z-20 md:hidden">
-                <SheetTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-4 py-2 text-sm font-medium text-foreground backdrop-blur"
-                  >
-                    <Menu className="h-4 w-4" />
-                    Meny
-                  </button>
-                </SheetTrigger>
+        <SheetContent side="left" className="px-0">
+          <SheetHeader className="border-b border-border/70 px-5 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-lg font-semibold">BOB</div>
+                <p className="text-xs text-muted-foreground">BIM &amp; Operations</p>
               </div>
-              <SheetContent side="left" className="px-0">
-                <SheetHeader className="border-b border-border/70 px-5 py-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-lg font-semibold">BOB</div>
-                      <p className="text-xs text-muted-foreground">BIM &amp; Operations</p>
-                    </div>
-                    <SheetClose asChild>
-                      <button
-                        type="button"
-                        className="rounded-full border border-border/70 bg-background p-2 text-muted-foreground hover:border-primary hover:text-primary-foreground"
-                        aria-label="Lukk meny"
-                      >
-                        X
-                      </button>
-                    </SheetClose>
-                  </div>
-                </SheetHeader>
-            {renderNavLinks(handleNavSelection, true)}
-            <SheetFooter>
-              <div className="rounded-lg border border-border/70 bg-muted px-3 py-2">
-                <p className="text-xs text-muted-foreground">Prosjekt</p>
-                <p className="text-sm font-medium">Velg i headeren</p>
-              </div>
-            </SheetFooter>
-              </SheetContent>
-            </Sheet>
-          )}
-          <div className="max-w-7xl mx-auto px-6 py-6">{children}</div>
-        </main>
-      </div>
+              <SheetClose asChild>
+                <button
+                  type="button"
+                  className="rounded-full border border-border/70 bg-background p-2 text-muted-foreground hover:border-primary hover:text-primary-foreground"
+                  aria-label="Lukk meny"
+                >
+                  X
+                </button>
+              </SheetClose>
+            </div>
+          </SheetHeader>
+          {renderNavLinks(handleNavSelection, true)}
+          <SheetFooter>
+            <div className="rounded-lg border border-border/70 bg-muted px-3 py-2">
+              <p className="text-xs text-muted-foreground">Prosjekt</p>
+              <p className="text-sm font-medium">Velg i headeren</p>
+            </div>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+      <main className="max-w-7xl mx-auto px-6 pt-20 pb-6">{children}</main>
     </div>
   );
 }
