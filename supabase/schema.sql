@@ -103,6 +103,7 @@ create index if not exists checks_project_idx on public.checks(project_id);
 
 create table if not exists public.check_findings (
   id uuid primary key default gen_random_uuid(),
+  project_id uuid references public.projects(id) on delete cascade,
   check_id uuid not null references public.checks(id) on delete cascade,
   severity text not null default 'info',
   title text not null,
@@ -112,7 +113,14 @@ create table if not exists public.check_findings (
   related_ifc_element text,
   created_at timestamptz not null default now()
 );
+alter table public.check_findings
+  add column if not exists project_id uuid references public.projects(id) on delete cascade;
+update public.check_findings cf
+set project_id = c.project_id
+from public.checks c
+where cf.check_id = c.id and cf.project_id is null;
 create index if not exists check_findings_check_idx on public.check_findings(check_id);
+create index if not exists check_findings_project_idx on public.check_findings(project_id);
 
 -- Tasks
 create table if not exists public.tasks (
