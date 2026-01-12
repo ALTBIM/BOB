@@ -18,6 +18,7 @@ type SessionContextValue = {
   ready: boolean;
   accessToken: string | null;
   signInWithPassword: (email: string, password: string) => Promise<{ error?: string }>;
+  signUpWithPassword: (email: string, password: string) => Promise<{ error?: string }>;
   signInWithMagicLink: (email: string) => Promise<{ error?: string }>;
   logout: () => Promise<void>;
 };
@@ -80,6 +81,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     return {};
   };
 
+  const signUpWithPassword = async (email: string, password: string) => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return { error: "Supabase ikke konfigurert." };
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined },
+    });
+    if (error) return { error: error.message };
+    return {};
+  };
+
   const signInWithMagicLink = async (email: string) => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return { error: "Supabase ikke konfigurert." };
@@ -104,6 +117,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       ready,
       accessToken,
       signInWithPassword,
+      signUpWithPassword,
       signInWithMagicLink,
       logout,
     }),

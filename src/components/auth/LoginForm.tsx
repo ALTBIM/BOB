@@ -9,10 +9,11 @@ import { Label } from "@/components/ui/label";
 import { useSession } from "@/lib/session";
 
 export default function LoginForm() {
-  const { signInWithPassword, signInWithMagicLink } = useSession();
+  const { signInWithPassword, signUpWithPassword, signInWithMagicLink } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [signupSuccess, setSignupSuccess] = useState(false);
   const [loginData, setLoginData] = useState({ email: "", password: "" });
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -20,6 +21,7 @@ export default function LoginForm() {
     setIsLoading(true);
     setError(null);
     setMagicLinkSent(false);
+    setSignupSuccess(false);
 
     const email = loginData.email.trim().toLowerCase();
     const password = loginData.password.trim();
@@ -54,6 +56,7 @@ export default function LoginForm() {
     setIsLoading(true);
     setError(null);
     setMagicLinkSent(false);
+    setSignupSuccess(false);
     try {
       const result = await signInWithMagicLink(email);
       if (result.error) {
@@ -64,6 +67,33 @@ export default function LoginForm() {
     } catch (err) {
       console.error("Magic link failed", err);
       setError("Kunne ikke sende lenke. Pr\u00f8v igjen senere.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSignup = async () => {
+    const email = loginData.email.trim().toLowerCase();
+    const password = loginData.password.trim();
+    if (!email || !password) {
+      setError("E-post og passord kan ikke v\u00e6re tomme.");
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    setMagicLinkSent(false);
+    setSignupSuccess(false);
+    try {
+      const result = await signUpWithPassword(email, password);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setSignupSuccess(true);
+      setLoginData({ email: "", password: "" });
+    } catch (err) {
+      console.error("Signup failed", err);
+      setError("Kunne ikke opprette bruker. Pr\u00f8v igjen senere.");
     } finally {
       setIsLoading(false);
     }
@@ -83,11 +113,16 @@ export default function LoginForm() {
         <Card>
           <CardHeader>
             <CardTitle>Logg inn</CardTitle>
-            <CardDescription>Bruk e-post og passord, eller send en magisk lenke.</CardDescription>
+            <CardDescription>Bruk e-post og passord, opprett en ny bruker, eller send en magisk lenke.</CardDescription>
           </CardHeader>
           <CardContent>
             {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
             {magicLinkSent && <p className="text-sm text-emerald-600 mb-2">Magisk lenke er sendt til e-post.</p>}
+            {signupSuccess && (
+              <p className="text-sm text-emerald-600 mb-2">
+                Bruker opprettet. Sjekk e-post for bekreftelse hvis det kreves.
+              </p>
+            )}
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">E-post</Label>
@@ -121,11 +156,14 @@ export default function LoginForm() {
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Logger inn..." : "Logg inn"}
               </Button>
+              <Button type="button" variant="secondary" className="w-full" onClick={handleSignup} disabled={isLoading}>
+                Opprett bruker
+              </Button>
               <Button type="button" variant="outline" className="w-full" onClick={handleMagicLink} disabled={isLoading}>
                 Send magisk lenke
               </Button>
               <p className="text-xs text-muted-foreground text-center">
-                Mangler tilgang? Kontakt prosjektadministrator.
+                Har du ikke konto? Opprett bruker eller be om tilgang til prosjektet.
               </p>
             </form>
           </CardContent>
