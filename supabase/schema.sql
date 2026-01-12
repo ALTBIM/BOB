@@ -331,6 +331,10 @@ select pm.project_id, pm.user_id
 from public.project_members pm;
 
 -- Project policies
+drop policy if exists "projects_select" on public.projects;
+drop policy if exists "projects_insert" on public.projects;
+drop policy if exists "projects_update" on public.projects;
+drop policy if exists "projects_delete" on public.projects;
 create policy "projects_select" on public.projects for select
 using (exists (select 1 from public.project_members pm where pm.project_id = id and pm.user_id = auth.uid()) or auth.uid() = created_by);
 create policy "projects_insert" on public.projects for insert with check (auth.uid() is not null);
@@ -348,6 +352,11 @@ begin
     'chat_messages_v2','ingest_jobs','ingest_warnings','project_schedule_tasks'
   ]
   loop
+    execute format('drop policy if exists %I on public.%I;', tbl||'_select', tbl);
+    execute format('drop policy if exists %I on public.%I;', tbl||'_insert', tbl);
+    execute format('drop policy if exists %I on public.%I;', tbl||'_update', tbl);
+    execute format('drop policy if exists %I on public.%I;', tbl||'_delete', tbl);
+
     execute format($f$
       create policy %I_select on public.%I for select
       using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid()));
