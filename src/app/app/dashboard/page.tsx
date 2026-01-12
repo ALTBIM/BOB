@@ -5,72 +5,32 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Building2, Calendar, CheckCircle, Search } from "lucide-react";
 import LoginForm from "@/components/auth/LoginForm";
 import ProjectCreationModal from "@/components/projects/ProjectCreationModal";
-import { Project, db, getRoleDisplayName } from "@/lib/database";
+import { getRoleDisplayName } from "@/lib/database";
 import { useSession } from "@/lib/session";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { DocumentIngestPanel } from "@/components/rag/DocumentIngestPanel";
+import { useActiveProject } from "@/lib/active-project";
 
 export default function HomePage() {
   const { user, ready, logout } = useSession();
   const [isLoading, setIsLoading] = useState(true);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const { projects, activeProjectId, setActiveProjectId, activeProject, refreshProjects } = useActiveProject();
 
   useEffect(() => {
     if (ready) setIsLoading(false);
   }, [ready]);
 
-  useEffect(() => {
-    if (user) {
-      loadUserProjects();
-    } else {
-      setProjects([]);
-    }
-  }, [user]);
-
-  // Hydrate selected project from localStorage to keep selection across routes
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem("bob_selected_project");
-    if (stored) {
-      setSelectedProject(stored);
-    }
-  }, []);
-
-  // Persist selection
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (selectedProject) {
-      window.localStorage.setItem("bob_selected_project", selectedProject);
-    } else {
-      window.localStorage.removeItem("bob_selected_project");
-    }
-  }, [selectedProject]);
-
-  const loadUserProjects = async () => {
-    if (!user) return;
-    try {
-      const userProjects = await db.getProjectsForUser(user.id);
-      setProjects(userProjects);
-      if (userProjects.length && !selectedProject) {
-        setSelectedProject(userProjects[0].id);
-      }
-    } catch (error) {
-      console.error("Failed to load projects:", error);
-    }
-  };
-
   const handleLogout = () => {
     logout();
-    setSelectedProject(null);
+    setActiveProjectId("");
   };
 
-  const handleProjectCreate = (newProject: Project) => {
-    setProjects((prev) => [...prev, newProject]);
+  const handleProjectCreate = async (newProject: { id: string }) => {
+    setActiveProjectId(newProject.id);
+    await refreshProjects();
   };
 
   if (!user) {
@@ -120,26 +80,7 @@ export default function HomePage() {
             <div className="flex items-center gap-3">
               <div className="hidden lg:flex items-center gap-2">
                 <span className="text-sm font-medium text-muted-foreground">Prosjekt:</span>
-                <Select value={selectedProject || ""} onValueChange={setSelectedProject}>
-                  <SelectTrigger className="w-64 bg-background border-border">
-                    <SelectValue placeholder="Velg prosjekt...">
-                      {selectedProject && projects.find((p) => p.id === selectedProject)?.name}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        <div className="flex items-center space-x-2">
-                          <Building2 className="w-4 h-4" />
-                          <span>{project.name}</span>
-                          <Badge variant={project.status === "active" ? "default" : "secondary"} className="ml-2">
-                            {project.status}
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Badge variant="outline">{activeProject?.name || "Velg prosjekt"}</Badge>
               </div>
 
               <div className="flex items-center gap-2">
@@ -225,9 +166,9 @@ export default function HomePage() {
               <Card
                 key={project.id}
                 className={`border border-border bg-card hover:shadow-sm transition-shadow cursor-pointer ${
-                  selectedProject === project.id ? "ring-1 ring-primary/60 bg-primary/5 dark:bg-primary/10" : ""
+                  activeProjectId === project.id ? "ring-1 ring-primary/60 bg-primary/5 dark:bg-primary/10" : ""
                 }`}
-                onClick={() => setSelectedProject(project.id)}
+                onClick={() => setActiveProjectId(project.id)}
               >
                 <CardHeader>
                   <div className="flex justify-between items-start">
@@ -262,14 +203,14 @@ export default function HomePage() {
             ))}
           </div>
 
-          {selectedProject && (
+          {activeProjectId && (
             <Card>
               <CardHeader>
                 <CardTitle>Dokument- og kravinnhenting</CardTitle>
                 <CardDescription>Tekstuttrekk for chat/kontroller fra prosjektets dokumenter.</CardDescription>
               </CardHeader>
               <CardContent>
-                <DocumentIngestPanel projectId={selectedProject} />
+                <DocumentIngestPanel projectId={activeProjectId} />
               </CardContent>
             </Card>
           )}

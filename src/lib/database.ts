@@ -32,6 +32,7 @@ export interface ProjectMember {
   userId: string;
   projectId: string;
   role: ProjectRole;
+  accessLevel: AccessLevel;
   permissions: Permission[];
   addedAt: string;
   addedBy: string;
@@ -68,6 +69,7 @@ export type UserRole =
 export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'completed' | 'cancelled';
 export type ProjectType = 'residential' | 'commercial' | 'industrial' | 'infrastructure' | 'renovation';
 export type ProjectRole = UserRole;
+export type AccessLevel = 'read' | 'write' | 'admin';
 export type Permission = 'read' | 'write' | 'delete' | 'manage_users' | 'manage_models' | 'generate_lists' | 'run_controls';
 export type ModelStatus = 'uploading' | 'processing' | 'completed' | 'error';
 
@@ -81,9 +83,10 @@ const normalizeProject = (row: any, member?: any): Project => {
           userId: member.user_id,
           projectId: row.id,
           role: (member.role as ProjectRole) || 'byggherre',
+          accessLevel: (member.access_level as AccessLevel) || 'read',
           permissions: (member.permissions as Permission[]) || [],
           addedAt: member.created_at ? new Date(member.created_at).toISOString() : createdAt,
-          addedBy: member.added_by || member.user_id,
+          addedBy: member.user_id,
         },
       ]
     : [];
@@ -174,6 +177,7 @@ class MockDatabase {
           userId: '1',
           projectId: 'project-1',
           role: 'prosjektleder',
+          accessLevel: 'admin',
           permissions: ['read', 'write', 'delete', 'manage_users', 'manage_models', 'generate_lists', 'run_controls'],
           addedAt: '2024-01-01T00:00:00Z',
           addedBy: '1'
@@ -182,6 +186,7 @@ class MockDatabase {
           userId: '2',
           projectId: 'project-1',
           role: 'prosjekterende_ark',
+          accessLevel: 'write',
           permissions: ['read', 'write', 'manage_models', 'generate_lists'],
           addedAt: '2024-01-02T00:00:00Z',
           addedBy: '1'
@@ -190,6 +195,7 @@ class MockDatabase {
           userId: '3',
           projectId: 'project-1',
           role: 'bas_byggeledelse',
+          accessLevel: 'write',
           permissions: ['read', 'generate_lists'],
           addedAt: '2024-01-03T00:00:00Z',
           addedBy: '1'
@@ -212,6 +218,7 @@ class MockDatabase {
           userId: '1',
           projectId: 'project-2',
           role: 'prosjektleder',
+          accessLevel: 'admin',
           permissions: ['read', 'write', 'delete', 'manage_users', 'manage_models', 'generate_lists', 'run_controls'],
           addedAt: '2024-01-05T00:00:00Z',
           addedBy: '1'
@@ -234,6 +241,7 @@ class MockDatabase {
           userId: '1',
           projectId: 'project-3',
           role: 'prosjektleder',
+          accessLevel: 'admin',
           permissions: ['read', 'write', 'delete', 'manage_users', 'manage_models', 'generate_lists', 'run_controls'],
           addedAt: '2024-01-10T00:00:00Z',
           addedBy: '1'
@@ -242,6 +250,7 @@ class MockDatabase {
           userId: '3',
           projectId: 'project-3',
           role: 'bas_byggeledelse',
+          accessLevel: 'write',
           permissions: ['read', 'generate_lists'],
           addedAt: '2024-01-11T00:00:00Z',
           addedBy: '1'
@@ -387,7 +396,7 @@ class MockDatabase {
       const [{ data: memberRows, error: memberErr }, { data: createdRows, error: createdErr }] = await Promise.all([
         supabase
           .from("project_members")
-          .select("role, permissions, created_at, project:projects(*)")
+          .select("role, access_level, permissions, created_at, project:projects(*)")
           .eq("user_id", userId),
         supabase.from("projects").select("*").eq("created_by", userId),
       ]);
@@ -403,7 +412,15 @@ class MockDatabase {
         if (createdRows) {
           createdRows.forEach((row: any) => {
             if (!byId.has(row.id)) {
-              byId.set(row.id, normalizeProject(row, { user_id: userId, role: "byggherre", permissions: [] }));
+              byId.set(
+                row.id,
+                normalizeProject(row, {
+                  user_id: userId,
+                  role: "byggherre",
+                  access_level: "admin",
+                  permissions: [],
+                })
+              );
             }
           });
         }
@@ -428,6 +445,37 @@ class MockDatabase {
         progress: projectData.progress ?? 0,
         created_by: projectData.createdBy,
       };
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        if (token) {
+          const res = await fetch("/api/projects", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: payload.name,
+              description: payload.description,
+              status: payload.status,
+              client: payload.client,
+              location: payload.location,
+              type: payload.type,
+              progress: payload.progress,
+            }),
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json?.project) {
+              return normalizeProject(json.project, json.member);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Kunne ikke opprette prosjekt via API", err);
+      }
+
       const { data, error } = await supabase.from("projects").insert(payload).select("*").single();
       if (error) {
         throw error;
@@ -445,7 +493,8 @@ class MockDatabase {
         const memberRow = {
           project_id: data.id,
           user_id: projectData.createdBy,
-          role: 'prosjektleder' as ProjectRole,
+          role: 'byggherre' as ProjectRole,
+          access_level: 'admin',
           permissions,
           created_at: new Date().toISOString()
         };
@@ -465,7 +514,8 @@ class MockDatabase {
         {
           userId: projectData.createdBy,
           projectId: `project-${Date.now()}`,
-          role: 'prosjektleder',
+          role: 'byggherre',
+          accessLevel: 'admin',
           permissions: ['read', 'write', 'delete', 'manage_users', 'manage_models', 'generate_lists', 'run_controls'],
           addedAt: new Date().toISOString(),
           addedBy: projectData.createdBy

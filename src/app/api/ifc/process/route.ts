@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { processIfcBuffer } from "@/lib/ifc-processor";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getAuthUser, requireProjectAccess } from "@/lib/supabase-auth";
 
 export const runtime = "nodejs";
 
@@ -15,6 +17,21 @@ export async function POST(request: Request) {
 
   if (!projectId || !modelId || !fileUrl) {
     return NextResponse.json({ error: "projectId, modelId og fileUrl er p\u00e5krevd" }, { status: 400 });
+  }
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json({ error: "Supabase ikke konfigurert" }, { status: 500 });
+  }
+
+  const { user, error: authError } = await getAuthUser(request);
+  if (!user) {
+    return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+  }
+
+  const membership = await requireProjectAccess(supabase, projectId, user.id, "write");
+  if (!membership.ok) {
+    return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
   }
 
   try {

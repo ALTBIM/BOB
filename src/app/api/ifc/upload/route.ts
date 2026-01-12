@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { getAuthUser, requireProjectMembership } from "@/lib/supabase-auth";
+import { getAuthUser, requireProjectAccess } from "@/lib/supabase-auth";
 import { processIfcBuffer } from "@/lib/ifc-processor";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_IFC_BUCKET || "ifc-models";
@@ -120,14 +120,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Filen er for stor (maks ${MAX_SIZE_MB} MB)` }, { status: 400 });
   }
 
-  const membership = await requireProjectMembership(supabase, projectId, user.id);
+  const membership = await requireProjectAccess(supabase, projectId, user.id, "write");
   if (!membership.ok) {
     return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
   }
 
   const ext = file.name.split(".").pop() || "ifc";
   if (!["ifc", "ifczip"].includes(ext.toLowerCase())) {
-    return NextResponse.json({ error: "Kun .ifc eller .ifczip er stottet" }, { status: 400 });
+    return NextResponse.json({ error: "Kun .ifc eller .ifczip er st\u00f8ttet" }, { status: 400 });
   }
 
   const safeName = sanitizeFilename(file.name);

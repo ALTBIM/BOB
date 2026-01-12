@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { getAuthUser, requireProjectMembership } from "@/lib/supabase-auth";
+import { getAuthUser, requireProjectAccess } from "@/lib/supabase-auth";
 import { ingestScheduleFile, ingestTextDocument } from "@/lib/ingest";
 
 const FILE_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_FILE_BUCKET || "project-files";
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Filen er for stor (maks ${MAX_SIZE_MB} MB)` }, { status: 400 });
   }
 
-  const membership = await requireProjectMembership(supabase, projectId, user.id);
+  const membership = await requireProjectAccess(supabase, projectId, user.id, "write");
   if (!membership.ok) {
     return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
   }

@@ -1,7 +1,9 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import * as WebIFC from "web-ifc";
 import path from "path";
 import { getQuantitySummary } from "@/lib/ifc-index";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getAuthUser, requireProjectMembership } from "@/lib/supabase-auth";
 
 export const runtime = "nodejs";
 
@@ -24,6 +26,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "projectId og modelId er p\u00e5krevd" }, { status: 400 });
   }
 
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json({ error: "Supabase ikke konfigurert" }, { status: 500 });
+  }
+
+  const { user, error: authError } = await getAuthUser(request);
+  if (!user) {
+    return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+  }
+
+  const membership = await requireProjectMembership(supabase, projectId, user.id);
+  if (!membership.ok) {
+    return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
+  }
+
   try {
     const rows = await getQuantitySummary({ projectId, modelId, groupBy, fields, filterType, filterName });
     return NextResponse.json({ ok: true, rows });
@@ -32,6 +49,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Kunne ikke hente mengder", detail: String(err) }, { status: 500 });
   }
 }
+
 // Minimal type list to report counts
 const TYPES = [
   "IFCPROJECT",
@@ -63,9 +81,24 @@ for (const k of Object.keys(WebIFC)) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { fileUrl } = body as { fileUrl?: string };
-    if (!fileUrl) {
-      return NextResponse.json({ error: "Mangler fileUrl" }, { status: 400 });
+    const { fileUrl, projectId } = body as { fileUrl?: string; projectId?: string };
+    if (!fileUrl || !projectId) {
+      return NextResponse.json({ error: "Mangler fileUrl eller projectId" }, { status: 400 });
+    }
+
+    const supabase = getSupabaseServerClient();
+    if (!supabase) {
+      return NextResponse.json({ error: "Supabase ikke konfigurert" }, { status: 500 });
+    }
+
+    const { user, error: authError } = await getAuthUser(request);
+    if (!user) {
+      return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+    }
+
+    const membership = await requireProjectMembership(supabase, projectId, user.id);
+    if (!membership.ok) {
+      return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
     }
 
     const res = await fetch(fileUrl);
@@ -177,4 +210,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Klarte ikke hente mengder", detail: String(err) }, { status: 500 });
   }
 }
-

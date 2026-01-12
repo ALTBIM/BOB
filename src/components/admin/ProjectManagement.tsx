@@ -15,22 +15,22 @@ import {
   Building2, 
   Users, 
   FileText, 
-  Settings, 
   Edit, 
   Trash2, 
   Plus,
   Eye,
-  UserPlus,
   Upload,
   Download
 } from "lucide-react";
 import { Project, User, BIMModel, ProjectStatus, ProjectType, db } from "@/lib/database";
 import { uploadIfcFile } from "@/lib/storage";
 import { useSession } from "@/lib/session";
+import ProjectMembersPanel from "@/components/admin/ProjectMembersPanel";
+import ProjectTeamsPanel from "@/components/admin/ProjectTeamsPanel";
 
 interface ProjectManagementProps {
   selectedProject: string | null;
-  onProjectSelect: (projectId: string) => void;
+  onProjectSelect?: (projectId: string) => void;
 }
 
 export default function ProjectManagement({ selectedProject, onProjectSelect }: ProjectManagementProps) {
@@ -57,13 +57,13 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [user]);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
       const [projectsData, usersData, modelsData] = await Promise.all([
-        db.getProjects(),
+        user ? db.getProjectsForUser(user.id) : db.getProjects(),
         db.getUsers(),
         db.getBIMModels()
       ]);
@@ -99,7 +99,7 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
         progress: 0
       });
       setIsCreateOpen(false);
-      onProjectSelect(project.id);
+      onProjectSelect?.(project.id);
     } catch (error) {
       setCreateError("Kunne ikke opprette prosjekt. Pr\u00f8v igjen.");
       console.error('Failed to create project:', error);
@@ -278,7 +278,7 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
                 className={`hover:shadow-lg transition-all cursor-pointer ${
                   selectedProject === project.id ? 'ring-2 ring-blue-500 bg-blue-50' : ''
                 }`}
-                onClick={() => onProjectSelect(project.id)}
+                onClick={() => onProjectSelect?.(project.id)}
               >
                 <CardHeader>
                   <div className="flex justify-between items-start">
@@ -413,62 +413,16 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
 
         <TabsContent value="team" className="space-y-6">
           {selectedProjectData ? (
-            <Card>
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle>Team Members</CardTitle>
-                    <CardDescription>Manage user access and roles for {selectedProjectData.name}</CardDescription>
-                  </div>
-                  <Button size="sm">
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    Add Member
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {selectedProjectData.teamMembers.map((member) => {
-                    const user = users.find(u => u.id === member.userId);
-                    if (!user) return null;
-
-                    return (
-                      <div key={member.userId} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                            <span className="text-blue-600 font-medium">
-                              {user.name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-slate-900">{user.name}</h4>
-                            <div className="text-sm text-slate-600">{user.company}</div>
-                            <div className="text-xs text-slate-500">
-                              Added {formatDate(member.addedAt)}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <Badge variant="default">{member.role}</Badge>
-                          <div className="text-xs text-slate-500">
-                            {member.permissions.length} permissions
-                          </div>
-                          <Button variant="outline" size="sm">
-                            <Settings className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+            <div className="space-y-6">
+              <ProjectMembersPanel projectId={selectedProjectData.id} />
+              <ProjectTeamsPanel projectId={selectedProjectData.id} />
+            </div>
           ) : (
             <Card>
               <CardContent className="text-center py-12">
                 <Users className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                <h3 className="font-medium text-slate-900 mb-2">No Project Selected</h3>
-                <p className="text-slate-600">Select a project to manage team members</p>
+                <h3 className="font-medium text-slate-900 mb-2">Ingen prosjekt valgt</h3>
+                <p className="text-slate-600">Velg prosjekt for å administrere tilgang</p>
               </CardContent>
             </Card>
           )}

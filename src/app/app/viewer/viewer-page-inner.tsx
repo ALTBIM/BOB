@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSession } from "@/lib/session";
-import { db, Project } from "@/lib/database";
+import { useActiveProject } from "@/lib/active-project";
 import { Loader2, Eye } from "lucide-react";
 import { listIfcFiles } from "@/lib/storage";
 
@@ -38,48 +39,37 @@ const buildViewerUrl = (projectId: string, file: { id?: string; name: string; pa
 
 export default function ViewerPageInner() {
   const { user, ready } = useSession();
+  const { projects, activeProjectId, setActiveProjectId } = useActiveProject();
   const searchParams = useSearchParams();
   const paramProjectId = useMemo(() => searchParams.get("projectId") || "", [searchParams]);
   const paramUrl = useMemo(() => searchParams.get("url") || searchParams.get("modelUrl") || "", [searchParams]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState<string>("");
   const [models, setModels] = useState<ModelItem[]>([]);
   const [selectedViewerUrl, setSelectedViewerUrl] = useState<string>("");
   const [loadingModels, setLoadingModels] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    const loadProjects = async () => {
-      try {
-        const list = await db.getProjectsForUser(user.id);
-        setProjects(list);
-        if (list.length && !projectId) {
-          const initial = paramProjectId && list.find((p) => p.id === paramProjectId) ? paramProjectId : list[0].id;
-          setProjectId(initial);
-        }
-      } catch (err) {
-        console.warn("Kunne ikke hente prosjekter", err);
-      }
-    };
-    loadProjects();
-  }, [user, paramProjectId, projectId]);
+    if (!paramProjectId || projects.length === 0) return;
+    if (projects.some((p) => p.id === paramProjectId) && paramProjectId !== activeProjectId) {
+      setActiveProjectId(paramProjectId);
+    }
+  }, [paramProjectId, projects, activeProjectId, setActiveProjectId]);
 
   useEffect(() => {
     const loadModels = async () => {
-      if (!projectId) {
+      if (!activeProjectId) {
         setModels([]);
         setSelectedViewerUrl("");
         return;
       }
       setLoadingModels(true);
       try {
-        const storageList = await listIfcFiles(projectId);
-                const items: ModelItem[] =
+        const storageList = await listIfcFiles(activeProjectId);
+        const items: ModelItem[] =
           storageList?.map((m: any) => ({
             id: m.id || m.path,
             name: m.name || m.filename || m.path,
             fileUrl: m.publicUrl,
-            viewerUrl: buildViewerUrl(projectId, {
+            viewerUrl: buildViewerUrl(activeProjectId, {
               id: m.id || m.path,
               name: m.name || m.filename || m.path,
               path: m.path,
@@ -104,7 +94,7 @@ export default function ViewerPageInner() {
       }
     };
     loadModels();
-  }, [projectId, paramUrl]);
+  }, [activeProjectId, paramUrl]);
 
   if (!ready) {
     return (
@@ -147,18 +137,11 @@ export default function ViewerPageInner() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Prosjekt</Label>
-              <Select value={projectId} onValueChange={setProjectId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Velg prosjekt..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">
+                  {projects.find((p) => p.id === activeProjectId)?.name || "Velg prosjekt i sidemenyen"}
+                </Badge>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>IFC-modell</Label>

@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Building2, Calendar, MapPin, Users } from "lucide-react";
+import { db, ProjectType } from "@/lib/database";
+import { useSession } from "@/lib/session";
 
 interface ProjectCreationModalProps {
   onProjectCreate: (project: any) => void;
@@ -16,6 +18,8 @@ interface ProjectCreationModalProps {
 export default function ProjectCreationModal({ onProjectCreate }: ProjectCreationModalProps) {
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useSession();
   const [projectData, setProjectData] = useState({
     name: "",
     description: "",
@@ -29,20 +33,30 @@ export default function ProjectCreationModal({ onProjectCreate }: ProjectCreatio
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      setError("Du m\u00e5 v\u00e6re logget inn for \u00e5 opprette prosjekt.");
+      return;
+    }
+    if (!projectData.name.trim()) {
+      setError("Prosjektnavn er p\u00e5krevd.");
+      return;
+    }
     setIsLoading(true);
+    setError(null);
 
-    // Simulate API call
-    setTimeout(() => {
-      const newProject = {
-        id: `project-${Date.now()}`,
-        ...projectData,
+    try {
+      const resolvedType = (projectData.type as ProjectType) || "commercial";
+      const newProject = await db.createProject({
+        name: projectData.name.trim(),
+        description: projectData.description.trim(),
         status: "planning",
         progress: 0,
-        teamMembers: 1,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
+        client: projectData.client.trim(),
+        location: projectData.location.trim(),
+        type: resolvedType,
+        createdBy: user.id,
+      });
+
       onProjectCreate(newProject);
       setOpen(false);
       setProjectData({
@@ -55,8 +69,12 @@ export default function ProjectCreationModal({ onProjectCreate }: ProjectCreatio
         budget: "",
         client: ""
       });
+    } catch (err) {
+      console.error("Kunne ikke opprette prosjekt", err);
+      setError("Kunne ikke opprette prosjekt. Pr\u00f8v igjen.");
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -64,51 +82,51 @@ export default function ProjectCreationModal({ onProjectCreate }: ProjectCreatio
       <DialogTrigger asChild>
         <Button>
           <Building2 className="h-4 w-4 mr-2" />
-          New Project
+          Nytt prosjekt
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>Create New Project</DialogTitle>
+          <DialogTitle>Opprett nytt prosjekt</DialogTitle>
           <DialogDescription>
-            Set up a new construction project in BOB. You can add team members and upload BIM models after creation.
+            Opprett et prosjekt og inviter teamet etterp\u00e5.
           </DialogDescription>
         </DialogHeader>
-        
+        {error && <p className="text-sm text-destructive">{error}</p>}
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="project-name">Project Name *</Label>
+              <Label htmlFor="project-name">Prosjektnavn *</Label>
               <Input
                 id="project-name"
-                placeholder="e.g., Residential Complex A"
+                placeholder="f.eks. Nye Drammen Sykehus"
                 value={projectData.name}
                 onChange={(e) => setProjectData({ ...projectData, name: e.target.value })}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="project-type">Project Type</Label>
+              <Label htmlFor="project-type">Prosjekttype</Label>
               <Select value={projectData.type} onValueChange={(value) => setProjectData({ ...projectData, type: value })}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select project type" />
+                  <SelectValue placeholder="Velg type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="residential">Residential</SelectItem>
-                  <SelectItem value="commercial">Commercial</SelectItem>
-                  <SelectItem value="industrial">Industrial</SelectItem>
-                  <SelectItem value="infrastructure">Infrastructure</SelectItem>
-                  <SelectItem value="renovation">Renovation</SelectItem>
+                  <SelectItem value="residential">Bolig</SelectItem>
+                  <SelectItem value="commercial">N\u00e6ring</SelectItem>
+                  <SelectItem value="industrial">Industri</SelectItem>
+                  <SelectItem value="infrastructure">Infrastruktur</SelectItem>
+                  <SelectItem value="renovation">Rehab</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="project-description">Description</Label>
+            <Label htmlFor="project-description">Beskrivelse</Label>
             <Textarea
               id="project-description"
-              placeholder="Brief description of the project..."
+              placeholder="Kort beskrivelse av prosjektet..."
               value={projectData.description}
               onChange={(e) => setProjectData({ ...projectData, description: e.target.value })}
               rows={3}
@@ -117,12 +135,12 @@ export default function ProjectCreationModal({ onProjectCreate }: ProjectCreatio
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="project-location">Location</Label>
+              <Label htmlFor="project-location">Lokasjon</Label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
                   id="project-location"
-                  placeholder="City, Country"
+                  placeholder="Sted"
                   className="pl-10"
                   value={projectData.location}
                   onChange={(e) => setProjectData({ ...projectData, location: e.target.value })}
@@ -130,12 +148,12 @@ export default function ProjectCreationModal({ onProjectCreate }: ProjectCreatio
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="project-client">Client</Label>
+              <Label htmlFor="project-client">Oppdragsgiver</Label>
               <div className="relative">
                 <Users className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
                   id="project-client"
-                  placeholder="Client name"
+                  placeholder="Kunde"
                   className="pl-10"
                   value={projectData.client}
                   onChange={(e) => setProjectData({ ...projectData, client: e.target.value })}
@@ -146,7 +164,7 @@ export default function ProjectCreationModal({ onProjectCreate }: ProjectCreatio
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="start-date">Start Date</Label>
+              <Label htmlFor="start-date">Startdato</Label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
@@ -159,7 +177,7 @@ export default function ProjectCreationModal({ onProjectCreate }: ProjectCreatio
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="end-date">Expected End Date</Label>
+              <Label htmlFor="end-date">Forventet slutt</Label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
@@ -174,10 +192,10 @@ export default function ProjectCreationModal({ onProjectCreate }: ProjectCreatio
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="project-budget">Budget (Optional)</Label>
+            <Label htmlFor="project-budget">Budsjett (valgfritt)</Label>
             <Input
               id="project-budget"
-              placeholder="e.g., 5,000,000 NOK"
+              placeholder="f.eks. 5 000 000 NOK"
               value={projectData.budget}
               onChange={(e) => setProjectData({ ...projectData, budget: e.target.value })}
             />
@@ -185,10 +203,10 @@ export default function ProjectCreationModal({ onProjectCreate }: ProjectCreatio
 
           <div className="flex justify-end space-x-2 pt-4">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              Avbryt
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Creating..." : "Create Project"}
+              {isLoading ? "Oppretter..." : "Opprett prosjekt"}
             </Button>
           </div>
         </form>

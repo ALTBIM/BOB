@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ingestTextDocument } from "@/lib/ingest";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { getAuthUser, requireProjectMembership } from "@/lib/supabase-auth";
+import { getAuthUser, requireProjectAccess } from "@/lib/supabase-auth";
 
 export const runtime = "nodejs";
 
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
   }
-  const membership = await requireProjectMembership(supabase, projectId, user.id);
+  const membership = await requireProjectAccess(supabase, projectId, user.id, "write");
   if (!membership.ok) {
     return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
   }

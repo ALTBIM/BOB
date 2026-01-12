@@ -26,7 +26,7 @@ export async function requireProjectMembership(
   if (!supabase) return { ok: false, error: "Supabase ikke konfigurert." };
   const { data, error } = await supabase
     .from("project_members")
-    .select("id, role, company, permissions")
+    .select("id, role, company, permissions, access_level")
     .eq("project_id", projectId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -34,4 +34,19 @@ export async function requireProjectMembership(
   if (error) return { ok: false, error: error.message };
   if (!data) return { ok: false, error: "Ingen tilgang til valgt prosjekt." };
   return { ok: true, membership: data };
+}
+
+export async function requireProjectAccess(
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  projectId: string,
+  userId: string,
+  level: "read" | "write" | "admin"
+) {
+  const membership = await requireProjectMembership(supabase, projectId, userId);
+  if (!membership.ok) return membership;
+  const access = membership.membership?.access_level as string | undefined;
+  if (level === "read") return membership;
+  if (level === "write" && (access === "write" || access === "admin")) return membership;
+  if (level === "admin" && access === "admin") return membership;
+  return { ok: false, error: "Ingen tilgang til valgt prosjekt." };
 }

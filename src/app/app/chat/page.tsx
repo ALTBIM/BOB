@@ -5,11 +5,9 @@ import { MessageCircle, Search, Send, Plus, Trash2, BookOpen, Shield, History, I
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { v4 as uuid } from "uuid";
 import { useSession } from "@/lib/session";
-import { db, Project } from "@/lib/database";
-import { getSupabaseBrowserClient } from "@/lib/supabase-client";
+import { useActiveProject } from "@/lib/active-project";
 import LoginForm from "@/components/auth/LoginForm";
 
 interface Conversation {
@@ -87,9 +85,6 @@ const defaultMessages: Record<string, ChatMessage[]> = {
 };
 
 export default function ChatPage() {
-  const [projectId, setProjectId] = useState("");
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [projectRole, setProjectRole] = useState("ukjent");
   const [conversations, setConversations] = useState<Conversation[]>(defaultConversations);
   const [messagesByConversation, setMessagesByConversation] = useState<Record<string, ChatMessage[]>>(defaultMessages);
   const [activeConversationId, setActiveConversationId] = useState("1");
@@ -102,91 +97,38 @@ export default function ChatPage() {
   const [sourcesByConversation, setSourcesByConversation] = useState<Record<string, RetrievedSource[]>>({});
   const [chatError, setChatError] = useState<string | null>(null);
   const { user, accessToken, ready } = useSession();
+  const { activeProjectId, activeProject, activeRole, activeAccessLevel } = useActiveProject();
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!ready) return;
-    if (!user) {
-      setProjects([]);
-      setProjectId("");
-      return;
-    }
-    const load = async () => {
-      try {
-        const list = await db.getProjectsForUser(user.id);
-        setProjects(list);
-        if (typeof window === "undefined") return;
-        const stored = window.localStorage.getItem("bob_selected_project");
-        const storedValid = stored && list.some((p) => p.id === stored);
-        const nextId = storedValid ? stored! : list[0]?.id || "";
-        setProjectId(nextId);
-      } catch (err) {
-        console.warn("Klarte ikke hente prosjekter", err);
-        setProjects([]);
-        setProjectId("");
-      }
-    };
-    load();
-  }, [user, ready]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (projectId) {
-      window.localStorage.setItem("bob_selected_project", projectId);
-    } else {
-      window.localStorage.removeItem("bob_selected_project");
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    if (!user || !projectId) {
-      setProjectRole("ukjent");
-      return;
-    }
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
-    supabase
-      .from("project_members")
-      .select("role")
-      .eq("project_id", projectId)
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          console.warn("Kunne ikke hente prosjektrolle", error);
-          setProjectRole("ukjent");
-          return;
-        }
-        setProjectRole(data?.role || "ukjent");
-      });
-  }, [projectId, user]);
-
-  useEffect(() => {
-    if (!projectId) return;
-    const conv = loadFromStorage<Conversation[]>(`bob_conversations_${projectId}`, defaultConversations);
-    const msgs = loadFromStorage<Record<string, ChatMessage[]>>(`bob_messages_${projectId}`, defaultMessages);
-    const mem = loadFromStorage<MemoryItem[]>(`bob_memory_${projectId}`, []);
+    if (!activeProjectId) return;
+    const conv = loadFromStorage<Conversation[]>(`bob_conversations_${activeProjectId}`, defaultConversations);
+    const msgs = loadFromStorage<Record<string, ChatMessage[]>>(
+      `bob_messages_${activeProjectId}`,
+      defaultMessages
+    );
+    const mem = loadFromStorage<MemoryItem[]>(`bob_memory_${activeProjectId}`, []);
     setConversations(conv.length ? conv : defaultConversations);
     setMessagesByConversation(msgs);
     setActiveConversationId(conv[0]?.id || "1");
     setMemoryItems(mem);
-  }, [projectId]);
+  }, [activeProjectId]);
 
   useEffect(() => {
-    if (!projectId) return;
-    saveToStorage(`bob_conversations_${projectId}`, conversations);
-  }, [conversations, projectId]);
+    if (!activeProjectId) return;
+    saveToStorage(`bob_conversations_${activeProjectId}`, conversations);
+  }, [conversations, activeProjectId]);
 
   useEffect(() => {
-    if (!projectId) return;
-    saveToStorage(`bob_messages_${projectId}`, messagesByConversation);
-  }, [messagesByConversation, projectId]);
+    if (!activeProjectId) return;
+    saveToStorage(`bob_messages_${activeProjectId}`, messagesByConversation);
+  }, [messagesByConversation, activeProjectId]);
 
   useEffect(() => {
-    if (!projectId) return;
-    saveToStorage(`bob_memory_${projectId}`, memoryItems);
-  }, [memoryItems, projectId]);
+    if (!activeProjectId) return;
+    saveToStorage(`bob_memory_${activeProjectId}`, memoryItems);
+  }, [memoryItems, activeProjectId]);
 
   const messages = messagesByConversation[activeConversationId] || [];
   const activeSources = sourcesByConversation[activeConversationId] || [];
@@ -210,7 +152,7 @@ export default function ChatPage() {
   const handleSend = async () => {
     const text = input.trim();
     if (!text) return;
-    if (!projectId) {
+    if (!activeProjectId) {
       setChatError("Velg et prosjekt f\u00f8r du sender melding.");
       return;
     }
@@ -249,7 +191,7 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({
           message: text,
-          projectId,
+          projectId: activeProjectId,
           style: styleMode,
           sources: withSources,
           memory: memoryItems,
@@ -415,24 +357,19 @@ export default function ChatPage() {
             <div>
               <p className="text-sm text-muted-foreground">Prosjekt</p>
               <div className="flex items-center gap-2">
-                <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger className="w-64 bg-background">
-                    <SelectValue placeholder="Velg prosjekt..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.length === 0 && (
-                      <SelectItem value="__none" disabled>
-                        Ingen prosjekter tilgjengelig
-                      </SelectItem>
-                    )}
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Badge variant="secondary">Chatmodus</Badge>
+                <Badge variant="secondary">
+                  {activeProject ? activeProject.name : "Ingen prosjekt valgt"}
+                </Badge>
+                {activeRole && (
+                  <Badge variant="outline">
+                    {activeRole}
+                  </Badge>
+                )}
+                {activeAccessLevel && (
+                  <Badge variant="outline">
+                    {activeAccessLevel}
+                  </Badge>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -533,7 +470,7 @@ export default function ChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               className="flex-1"
-              disabled={!projectId || !accessToken}
+              disabled={!activeProjectId || !accessToken}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -541,11 +478,20 @@ export default function ChatPage() {
                 }
               }}
             />
-            <Button type="button" disabled={!input.trim() || isSending || !projectId || !accessToken} onClick={handleSend}>
+            <Button
+              type="button"
+              disabled={!input.trim() || isSending || !activeProjectId || !accessToken}
+              onClick={handleSend}
+            >
               <Send className="h-4 w-4 mr-2" />
               {isSending ? "Sender..." : "Send"}
             </Button>
           </div>
+          {!activeProjectId && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Velg prosjekt i sidemenyen f\u00f8r du starter chatten.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground mt-2">
             BOB foresl\u00e5r neste steg og bruker prosjektets kontekst. Kilder vises n\u00e5r dokumenter er koblet p\u00e5.
           </p>
@@ -592,7 +538,8 @@ export default function ChatPage() {
             <span>Prosjektisolert -> Ingen deling mellom prosjekter</span>
           </div>
           <div className="text-[11px] text-muted-foreground">
-            Rolle: {projectRole} \u2192 Bruker: {user?.email || "ukjent"}
+            Rolle: {activeRole || "ukjent"} \u2192 Tilgang: {activeAccessLevel || "ukjent"} \u2192 Bruker:{" "}
+            {user?.email || "ukjent"}
           </div>
         </div>
       </aside>

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getIfcMetadata, saveIfcMetadata } from "@/lib/ifc-store";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getAuthUser, requireProjectAccess, requireProjectMembership } from "@/lib/supabase-auth";
 
 export const runtime = "nodejs";
 
@@ -25,8 +27,24 @@ export async function GET(request: Request) {
   const projectId = url.searchParams.get("projectId") || "";
   const modelId = url.searchParams.get("modelId") || "";
   if (!projectId || !modelId) {
-    return NextResponse.json({ error: "projectId og modelId er pA\u00e5krevd" }, { status: 400 });
+    return NextResponse.json({ error: "projectId og modelId er p\u00e5krevd" }, { status: 400 });
   }
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json({ error: "Supabase ikke konfigurert" }, { status: 500 });
+  }
+
+  const { user, error: authError } = await getAuthUser(request);
+  if (!user) {
+    return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+  }
+
+  const membership = await requireProjectMembership(supabase, projectId, user.id);
+  if (!membership.ok) {
+    return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
+  }
+
   try {
     const meta = await getIfcMetadata(projectId, modelId);
     if (!meta) {
@@ -43,7 +61,22 @@ export async function POST(request: Request) {
   const { projectId, modelId } = body;
 
   if (!projectId || !modelId) {
-    return NextResponse.json({ error: "projectId og modelId er påkrevd" }, { status: 400 });
+    return NextResponse.json({ error: "projectId og modelId er p\u00e5krevd" }, { status: 400 });
+  }
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json({ error: "Supabase ikke konfigurert" }, { status: 500 });
+  }
+
+  const { user, error: authError } = await getAuthUser(request);
+  if (!user) {
+    return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+  }
+
+  const membership = await requireProjectAccess(supabase, projectId, user.id, "write");
+  if (!membership.ok) {
+    return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
   }
 
   try {

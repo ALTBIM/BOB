@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getAuthUser, requireProjectMembership } from "@/lib/supabase-auth";
 
 export async function GET(
   _req: Request,
@@ -14,6 +15,15 @@ export async function GET(
   const supabase = getSupabaseServerClient();
   if (!supabase) {
     return NextResponse.json({ error: "Supabase ikke konfigurert" }, { status: 500 });
+  }
+
+  const { user, error: authError } = await getAuthUser(_req);
+  if (!user) {
+    return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+  }
+  const membership = await requireProjectMembership(supabase, projectId, user.id);
+  if (!membership.ok) {
+    return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
   }
 
   try {

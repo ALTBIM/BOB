@@ -19,9 +19,14 @@ import {
   Image,
 } from "lucide-react";
 import clsx from "clsx";
-import { Fragment, useEffect, useState, type ReactElement } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactElement } from "react";
 
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import ProjectSelector from "@/components/layout/ProjectSelector";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { useSession } from "@/lib/session";
+import { useActiveProject } from "@/lib/active-project";
 
 const primaryNav = [
   { name: "BOB Chat", href: "/app/chat", icon: MessageCircle },
@@ -52,6 +57,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [filesOpen, setFilesOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [productionTab, setProductionTab] = useState<string | null>(null);
+  const { user, logout } = useSession();
+  const { activeAccessLevel } = useActiveProject();
+
+  const navItems = useMemo(() => {
+    if (activeAccessLevel === "admin") return primaryNav;
+    return primaryNav.filter((item) => item.href !== "/app/admin");
+  }, [activeAccessLevel]);
 
   const handleNavSelection = () => {
     setMobileNavOpen(false);
@@ -88,7 +100,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const renderNavLinks = (onItemClick?: () => void, closeOnNavigate?: boolean) => (
     <nav className="flex-1 px-3 py-4 space-y-1">
-      {primaryNav.map((item) => {
+      {navItems.map((item) => {
         const active = pathname === item.href;
         const Icon = item.icon;
         const linkNode: ReactElement = (
@@ -194,9 +206,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground lg:flex">
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-        <div className="fixed left-4 top-4 z-30">
+        <div className="fixed left-4 top-4 z-30 lg:hidden">
           <SheetTrigger asChild>
             <button
               type="button"
@@ -225,16 +237,45 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </SheetClose>
             </div>
           </SheetHeader>
+          <div className="px-5 py-3 border-b border-border/70">
+            <ProjectSelector />
+          </div>
           {renderNavLinks(handleNavSelection, true)}
-          <SheetFooter>
-            <div className="rounded-lg border border-border/70 bg-muted px-3 py-2">
-              <p className="text-xs text-muted-foreground">Prosjekt</p>
-              <p className="text-sm font-medium">Velg i headeren</p>
+          <SheetFooter className="border-t border-border/70 px-5 py-4">
+            <div className="flex items-center justify-between gap-2">
+              <ThemeToggle />
+              {user && (
+                <Button variant="outline" size="sm" onClick={() => logout()}>
+                  Logg ut
+                </Button>
+              )}
             </div>
           </SheetFooter>
         </SheetContent>
       </Sheet>
-      <main className="max-w-7xl mx-auto px-6 pt-20 pb-6">{children}</main>
+
+      <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r border-border/70 bg-card/60">
+        <div className="px-5 py-4 border-b border-border/70">
+          <div className="text-lg font-semibold">BOB</div>
+          <p className="text-xs text-muted-foreground">BIM &amp; Operations</p>
+        </div>
+        <div className="px-5 py-3 border-b border-border/70">
+          <ProjectSelector />
+        </div>
+        {renderNavLinks()}
+        <div className="mt-auto px-5 py-4 border-t border-border/70 flex items-center justify-between">
+          <ThemeToggle />
+          {user && (
+            <Button variant="outline" size="sm" onClick={() => logout()}>
+              Logg ut
+            </Button>
+          )}
+        </div>
+      </aside>
+
+      <div className="flex-1 min-w-0">
+        <main className="max-w-7xl mx-auto px-6 pt-20 pb-6 lg:pt-10">{children}</main>
+      </div>
     </div>
   );
 }
