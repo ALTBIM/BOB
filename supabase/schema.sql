@@ -206,7 +206,7 @@ create table if not exists public.document_chunks (
   chunk_index int not null,
   content text not null,
   token_count int,
-  embedding vector(3072),
+  embedding vector(1536),
   source_page int,
   source_section text,
   created_at timestamptz not null default now()

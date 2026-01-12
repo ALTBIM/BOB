@@ -3,7 +3,11 @@ import xlsx from "xlsx";
 import { getPgPool } from "@/lib/pg";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_EMBED_MODEL = process.env.OPENAI_EMBED_MODEL || "text-embedding-3-large";
+const OPENAI_EMBED_MODEL = process.env.OPENAI_EMBED_MODEL || "text-embedding-3-small";
+const EMBED_DIM = Number(
+  process.env.OPENAI_EMBED_DIM ||
+    (OPENAI_EMBED_MODEL === "text-embedding-3-large" ? "3072" : "1536")
+);
 
 const chunkText = (text: string, maxChars = 1500, overlap = 200) => {
   const clean = text.replace(/\s+/g, " ").trim();
@@ -67,6 +71,14 @@ export async function ingestTextDocument(params: IngestTextParams) {
   }
   try {
     embeddings = await embedTexts(chunks);
+    if (embeddings && embeddings.some((embedding) => embedding?.length !== EMBED_DIM)) {
+      const bad = embeddings.find((embedding) => embedding?.length !== EMBED_DIM);
+      warnings.push({
+        code: "embedding_dim_mismatch",
+        message: `Embedding-dimensjon ${bad?.length ?? "ukjent"} matcher ikke forventet ${EMBED_DIM}.`,
+      });
+      embeddings = null;
+    }
   } catch (err: any) {
     warnings.push({ code: "embedding_failed", message: err?.message || "Kunne ikke hente embeddings" });
     embeddings = null;

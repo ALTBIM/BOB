@@ -18,7 +18,11 @@ type RetrieveOptions = {
 };
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_EMBED_MODEL = process.env.OPENAI_EMBED_MODEL || "text-embedding-3-large";
+const OPENAI_EMBED_MODEL = process.env.OPENAI_EMBED_MODEL || "text-embedding-3-small";
+const EMBED_DIM = Number(
+  process.env.OPENAI_EMBED_DIM ||
+    (OPENAI_EMBED_MODEL === "text-embedding-3-large" ? "3072" : "1536")
+);
 
 const toSqlVector = (embedding: number[]) => `[${embedding.join(",")}]`;
 
@@ -69,6 +73,10 @@ export async function retrieveContext(
     console.warn("Embedding feilet", err);
   }
   if (!embedding) {
+    return { sources: [], contextText: "Ingen prosjektkilder funnet." };
+  }
+  if (embedding.length !== EMBED_DIM) {
+    console.warn(`Embedding dimensjon ${embedding.length} matcher ikke forventet ${EMBED_DIM}`);
     return { sources: [], contextText: "Ingen prosjektkilder funnet." };
   }
 
