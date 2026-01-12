@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { getAuthUser } from "@/lib/supabase-auth";
+import { getAuthUser, requireOrgAdmin } from "@/lib/supabase-auth";
 
 export const runtime = "nodejs";
 
@@ -12,6 +12,7 @@ type Body = {
   location?: string;
   type?: string;
   progress?: number;
+  orgId?: string | null;
 };
 
 export async function POST(request: Request) {
@@ -41,7 +42,15 @@ export async function POST(request: Request) {
     type: body.type || "commercial",
     progress: Number(body.progress ?? 0),
     created_by: user.id,
+    org_id: body.orgId || null,
   };
+
+  if (payload.org_id) {
+    const access = await requireOrgAdmin(supabase, payload.org_id, user.id);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error || "Ingen tilgang til organisasjon." }, { status: 403 });
+    }
+  }
 
   const { data: project, error: projectError } = await supabase
     .from("projects")

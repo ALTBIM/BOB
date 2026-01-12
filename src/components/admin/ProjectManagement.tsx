@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ import {
 import { Project, User, BIMModel, ProjectStatus, ProjectType, db } from "@/lib/database";
 import { uploadIfcFile } from "@/lib/storage";
 import { useSession } from "@/lib/session";
+import { useActiveProject } from "@/lib/active-project";
 import ProjectMembersPanel from "@/components/admin/ProjectMembersPanel";
 import ProjectTeamsPanel from "@/components/admin/ProjectTeamsPanel";
 
@@ -35,6 +36,7 @@ interface ProjectManagementProps {
 
 export default function ProjectManagement({ selectedProject, onProjectSelect }: ProjectManagementProps) {
   const { user } = useSession();
+  const { organizations, orgMemberships, isPlatformAdmin } = useActiveProject();
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [models, setModels] = useState<BIMModel[]>([]);
@@ -43,6 +45,7 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [newProjectOrgId, setNewProjectOrgId] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [newProject, setNewProject] = useState({
@@ -55,9 +58,22 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
     progress: 0
   });
 
+  const orgOptions = useMemo(() => {
+    if (isPlatformAdmin) return organizations;
+    const adminOrgIds = new Set(orgMemberships.filter((m) => m.orgRole === "org_admin").map((m) => m.orgId));
+    return organizations.filter((org) => adminOrgIds.has(org.id));
+  }, [isPlatformAdmin, organizations, orgMemberships]);
+
   useEffect(() => {
     loadData();
   }, [user]);
+
+  useEffect(() => {
+    if (!isCreateOpen) return;
+    if (!newProjectOrgId && orgOptions.length === 1) {
+      setNewProjectOrgId(orgOptions[0].id);
+    }
+  }, [isCreateOpen, newProjectOrgId, orgOptions]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -83,10 +99,15 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
         setCreateError("Du m\u00e5 v\u00e6re logget inn for \u00e5 opprette prosjekt.");
         return;
       }
+      if (orgOptions.length > 0 && !newProjectOrgId) {
+        setCreateError("Velg organisasjon for prosjektet.");
+        return;
+      }
       setCreateError(null);
       const project = await db.createProject({
         ...newProject,
-        createdBy: user.id
+        createdBy: user.id,
+        orgId: newProjectOrgId || null,
       });
       setProjects(prev => [...prev, project]);
       setNewProject({
@@ -98,6 +119,7 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
         location: "",
         progress: 0
       });
+      setNewProjectOrgId("");
       setIsCreateOpen(false);
       onProjectSelect?.(project.id);
     } catch (error) {
@@ -124,7 +146,7 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
 
   const handleUploadIfc = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!selectedProject) {
-      alert("Velg et prosjekt først.");
+      alert("Velg et prosjekt f\u00f8rst.");
       return;
     }
     if (!e.target.files || e.target.files.length === 0) return;
@@ -206,6 +228,23 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
                   placeholder="Enter project name"
                 />
               </div>
+              {orgOptions.length > 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="org">Organization</Label>
+                  <Select value={newProjectOrgId} onValueChange={setNewProjectOrgId}>
+                    <SelectTrigger id="org">
+                      <SelectValue placeholder="Select organization" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {orgOptions.map((org) => (
+                        <SelectItem key={org.id} value={org.id}>
+                          {org.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="client">Client</Label>
                 <Input
@@ -422,7 +461,9 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
               <CardContent className="text-center py-12">
                 <Users className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                 <h3 className="font-medium text-slate-900 mb-2">Ingen prosjekt valgt</h3>
-                <p className="text-slate-600">Velg prosjekt for å administrere tilgang</p>
+                <p className="text-slate-600">
+                  Velg prosjekt for {"\u00e5"} administrere tilgang
+                </p>
               </CardContent>
             </Card>
           )}
@@ -461,7 +502,7 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
                         <div>
                           <h4 className="font-medium text-slate-900">{model.name}</h4>
                           <div className="text-sm text-slate-600">
-                            {(model.size / 1024 / 1024).toFixed(1)} MB • {model.filename}
+                            {(model.size / 1024 / 1024).toFixed(1)} MB {"\u2022"} {model.filename}
                           </div>
                           <div className="text-xs text-slate-500">
                             Uploaded {formatDate(model.uploadedAt)} by {users.find(u => u.id === model.uploadedBy)?.name}
@@ -514,3 +555,5 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
     </div>
   );
 }
+
+

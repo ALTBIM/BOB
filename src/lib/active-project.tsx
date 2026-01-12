@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { db, Project } from "@/lib/database";
+import { db, type AdminContext, type Organization, type OrgMembership, type OrgRole, Project } from "@/lib/database";
 import { useSession } from "@/lib/session";
 
 type ActiveProjectContextValue = {
@@ -10,6 +10,12 @@ type ActiveProjectContextValue = {
   activeProject: Project | null;
   activeRole: string | null;
   activeAccessLevel: "read" | "write" | "admin" | null;
+  activeOrgRole: OrgRole | null;
+  isPlatformAdmin: boolean;
+  hasOrgAdmin: boolean;
+  organizations: Organization[];
+  orgMemberships: OrgMembership[];
+  canSeeAdmin: boolean;
   loading: boolean;
   setActiveProjectId: (projectId: string) => void;
   refreshProjects: () => Promise<void>;
@@ -24,6 +30,11 @@ export function ActiveProjectProvider({ children }: { children: React.ReactNode 
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [adminContext, setAdminContext] = useState<AdminContext>({
+    isPlatformAdmin: false,
+    orgMemberships: [],
+    organizations: [],
+  });
 
   const refreshProjects = async () => {
     if (!user) {
@@ -33,8 +44,9 @@ export function ActiveProjectProvider({ children }: { children: React.ReactNode 
     }
     setLoading(true);
     try {
-      const list = await db.getProjectsForUser(user.id);
+      const [list, admin] = await Promise.all([db.getProjectsForUser(user.id), db.getAdminContext(user.id)]);
       setProjects(list);
+      setAdminContext(admin);
       if (typeof window === "undefined") return;
       const currentValid = activeProjectId && list.some((p) => p.id === activeProjectId);
       const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -51,6 +63,7 @@ export function ActiveProjectProvider({ children }: { children: React.ReactNode 
     if (!user) {
       setProjects([]);
       setActiveProjectId("");
+      setAdminContext({ isPlatformAdmin: false, orgMemberships: [], organizations: [] });
       return;
     }
     refreshProjects();
@@ -76,6 +89,20 @@ export function ActiveProjectProvider({ children }: { children: React.ReactNode 
     return activeProject.teamMembers.find((m) => m.userId === user.id) || activeProject.teamMembers[0] || null;
   }, [activeProject, user]);
 
+  const activeOrgRole = useMemo(() => {
+    if (!activeProject?.orgId) return null;
+    const membership = adminContext.orgMemberships.find((m) => m.orgId === activeProject.orgId);
+    return membership?.orgRole || null;
+  }, [activeProject, adminContext.orgMemberships]);
+
+  const hasOrgAdmin = useMemo(() => {
+    return adminContext.orgMemberships.some((m) => m.orgRole === "org_admin");
+  }, [adminContext.orgMemberships]);
+
+  const canSeeAdmin = useMemo(() => {
+    return adminContext.isPlatformAdmin || hasOrgAdmin || activeMember?.accessLevel === "admin";
+  }, [adminContext.isPlatformAdmin, hasOrgAdmin, activeMember?.accessLevel]);
+
   const value = useMemo(
     () => ({
       projects,
@@ -83,11 +110,29 @@ export function ActiveProjectProvider({ children }: { children: React.ReactNode 
       activeProject,
       activeRole: activeMember?.role || null,
       activeAccessLevel: activeMember?.accessLevel || null,
+      activeOrgRole,
+      isPlatformAdmin: adminContext.isPlatformAdmin,
+      hasOrgAdmin,
+      organizations: adminContext.organizations,
+      orgMemberships: adminContext.orgMemberships,
+      canSeeAdmin,
       loading,
       setActiveProjectId,
       refreshProjects,
     }),
-    [projects, activeProjectId, activeProject, activeMember, loading]
+    [
+      projects,
+      activeProjectId,
+      activeProject,
+      activeMember,
+      activeOrgRole,
+      adminContext.isPlatformAdmin,
+      adminContext.organizations,
+      adminContext.orgMemberships,
+      canSeeAdmin,
+      hasOrgAdmin,
+      loading,
+    ]
   );
 
   return <ActiveProjectContext.Provider value={value}>{children}</ActiveProjectContext.Provider>;

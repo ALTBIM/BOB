@@ -58,12 +58,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [productionTab, setProductionTab] = useState<string | null>(null);
   const { user, logout } = useSession();
-  const { activeAccessLevel } = useActiveProject();
+  const { canSeeAdmin } = useActiveProject();
 
   const navItems = useMemo(() => {
-    if (activeAccessLevel === "admin") return primaryNav;
+    if (canSeeAdmin) return primaryNav;
     return primaryNav.filter((item) => item.href !== "/app/admin");
-  }, [activeAccessLevel]);
+  }, [canSeeAdmin]);
 
   const handleNavSelection = () => {
     setMobileNavOpen(false);
