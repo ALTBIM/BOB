@@ -341,40 +341,263 @@ create policy "projects_insert" on public.projects for insert with check (auth.u
 create policy "projects_update" on public.projects for update using (auth.uid() = created_by or exists (select 1 from public.project_members pm where pm.project_id = id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
 create policy "projects_delete" on public.projects for delete using (auth.uid() = created_by or exists (select 1 from public.project_members pm where pm.project_id = id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
 
--- Generic policy template for project-scoped tables
-do $$
-declare
-  tbl text;
-begin
-  foreach tbl in ARRAY[
-    'project_members','files','ifc_models','chats','chat_messages','checks','check_findings','tasks','kapplister',
-    'meeting_suggestions','file_texts','file_requirements','documents','document_chunks','sources','chat_threads',
-    'chat_messages_v2','ingest_jobs','ingest_warnings','project_schedule_tasks'
-  ]
-  loop
-    execute format('drop policy if exists %I on public.%I;', tbl||'_select', tbl);
-    execute format('drop policy if exists %I on public.%I;', tbl||'_insert', tbl);
-    execute format('drop policy if exists %I on public.%I;', tbl||'_update', tbl);
-    execute format('drop policy if exists %I on public.%I;', tbl||'_delete', tbl);
+-- Generic policy template for project-scoped tables (explicit to avoid PL/pgSQL issues)
+drop policy if exists "project_members_select" on public.project_members;
+drop policy if exists "project_members_insert" on public.project_members;
+drop policy if exists "project_members_update" on public.project_members;
+drop policy if exists "project_members_delete" on public.project_members;
+create policy "project_members_select" on public.project_members for select
+using (exists (select 1 from public.project_members pm where pm.project_id = project_members.project_id and pm.user_id = auth.uid()));
+create policy "project_members_insert" on public.project_members for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = project_members.project_id and pm.user_id = auth.uid()));
+create policy "project_members_update" on public.project_members for update
+using (exists (select 1 from public.project_members pm where pm.project_id = project_members.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "project_members_delete" on public.project_members for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = project_members.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
 
-    execute format($f$
-      create policy %I_select on public.%I for select
-      using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid()));
-    $f$, tbl||'_select', tbl, tbl);
+drop policy if exists "files_select" on public.files;
+drop policy if exists "files_insert" on public.files;
+drop policy if exists "files_update" on public.files;
+drop policy if exists "files_delete" on public.files;
+create policy "files_select" on public.files for select
+using (exists (select 1 from public.project_members pm where pm.project_id = files.project_id and pm.user_id = auth.uid()));
+create policy "files_insert" on public.files for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = files.project_id and pm.user_id = auth.uid()));
+create policy "files_update" on public.files for update
+using (exists (select 1 from public.project_members pm where pm.project_id = files.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "files_delete" on public.files for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = files.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
 
-    execute format($f$
-      create policy %I_insert on public.%I for insert
-      with check (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid()));
-    $f$, tbl||'_insert', tbl, tbl);
+drop policy if exists "ifc_models_select" on public.ifc_models;
+drop policy if exists "ifc_models_insert" on public.ifc_models;
+drop policy if exists "ifc_models_update" on public.ifc_models;
+drop policy if exists "ifc_models_delete" on public.ifc_models;
+create policy "ifc_models_select" on public.ifc_models for select
+using (exists (select 1 from public.project_members pm where pm.project_id = ifc_models.project_id and pm.user_id = auth.uid()));
+create policy "ifc_models_insert" on public.ifc_models for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = ifc_models.project_id and pm.user_id = auth.uid()));
+create policy "ifc_models_update" on public.ifc_models for update
+using (exists (select 1 from public.project_members pm where pm.project_id = ifc_models.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "ifc_models_delete" on public.ifc_models for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = ifc_models.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
 
-    execute format($f$
-      create policy %I_update on public.%I for update
-      using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
-    $f$, tbl||'_update', tbl, tbl);
+drop policy if exists "chats_select" on public.chats;
+drop policy if exists "chats_insert" on public.chats;
+drop policy if exists "chats_update" on public.chats;
+drop policy if exists "chats_delete" on public.chats;
+create policy "chats_select" on public.chats for select
+using (exists (select 1 from public.project_members pm where pm.project_id = chats.project_id and pm.user_id = auth.uid()));
+create policy "chats_insert" on public.chats for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = chats.project_id and pm.user_id = auth.uid()));
+create policy "chats_update" on public.chats for update
+using (exists (select 1 from public.project_members pm where pm.project_id = chats.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "chats_delete" on public.chats for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = chats.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
 
-    execute format($f$
-      create policy %I_delete on public.%I for delete
-      using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
-    $f$, tbl||'_delete', tbl, tbl);
-  end loop;
-end$$;
+drop policy if exists "chat_messages_select" on public.chat_messages;
+drop policy if exists "chat_messages_insert" on public.chat_messages;
+drop policy if exists "chat_messages_update" on public.chat_messages;
+drop policy if exists "chat_messages_delete" on public.chat_messages;
+create policy "chat_messages_select" on public.chat_messages for select
+using (exists (select 1 from public.project_members pm where pm.project_id = chat_messages.project_id and pm.user_id = auth.uid()));
+create policy "chat_messages_insert" on public.chat_messages for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = chat_messages.project_id and pm.user_id = auth.uid()));
+create policy "chat_messages_update" on public.chat_messages for update
+using (exists (select 1 from public.project_members pm where pm.project_id = chat_messages.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "chat_messages_delete" on public.chat_messages for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = chat_messages.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "checks_select" on public.checks;
+drop policy if exists "checks_insert" on public.checks;
+drop policy if exists "checks_update" on public.checks;
+drop policy if exists "checks_delete" on public.checks;
+create policy "checks_select" on public.checks for select
+using (exists (select 1 from public.project_members pm where pm.project_id = checks.project_id and pm.user_id = auth.uid()));
+create policy "checks_insert" on public.checks for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = checks.project_id and pm.user_id = auth.uid()));
+create policy "checks_update" on public.checks for update
+using (exists (select 1 from public.project_members pm where pm.project_id = checks.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "checks_delete" on public.checks for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = checks.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "check_findings_select" on public.check_findings;
+drop policy if exists "check_findings_insert" on public.check_findings;
+drop policy if exists "check_findings_update" on public.check_findings;
+drop policy if exists "check_findings_delete" on public.check_findings;
+create policy "check_findings_select" on public.check_findings for select
+using (exists (select 1 from public.project_members pm where pm.project_id = check_findings.project_id and pm.user_id = auth.uid()));
+create policy "check_findings_insert" on public.check_findings for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = check_findings.project_id and pm.user_id = auth.uid()));
+create policy "check_findings_update" on public.check_findings for update
+using (exists (select 1 from public.project_members pm where pm.project_id = check_findings.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "check_findings_delete" on public.check_findings for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = check_findings.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "tasks_select" on public.tasks;
+drop policy if exists "tasks_insert" on public.tasks;
+drop policy if exists "tasks_update" on public.tasks;
+drop policy if exists "tasks_delete" on public.tasks;
+create policy "tasks_select" on public.tasks for select
+using (exists (select 1 from public.project_members pm where pm.project_id = tasks.project_id and pm.user_id = auth.uid()));
+create policy "tasks_insert" on public.tasks for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = tasks.project_id and pm.user_id = auth.uid()));
+create policy "tasks_update" on public.tasks for update
+using (exists (select 1 from public.project_members pm where pm.project_id = tasks.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "tasks_delete" on public.tasks for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = tasks.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "kapplister_select" on public.kapplister;
+drop policy if exists "kapplister_insert" on public.kapplister;
+drop policy if exists "kapplister_update" on public.kapplister;
+drop policy if exists "kapplister_delete" on public.kapplister;
+create policy "kapplister_select" on public.kapplister for select
+using (exists (select 1 from public.project_members pm where pm.project_id = kapplister.project_id and pm.user_id = auth.uid()));
+create policy "kapplister_insert" on public.kapplister for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = kapplister.project_id and pm.user_id = auth.uid()));
+create policy "kapplister_update" on public.kapplister for update
+using (exists (select 1 from public.project_members pm where pm.project_id = kapplister.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "kapplister_delete" on public.kapplister for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = kapplister.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "meeting_suggestions_select" on public.meeting_suggestions;
+drop policy if exists "meeting_suggestions_insert" on public.meeting_suggestions;
+drop policy if exists "meeting_suggestions_update" on public.meeting_suggestions;
+drop policy if exists "meeting_suggestions_delete" on public.meeting_suggestions;
+create policy "meeting_suggestions_select" on public.meeting_suggestions for select
+using (exists (select 1 from public.project_members pm where pm.project_id = meeting_suggestions.project_id and pm.user_id = auth.uid()));
+create policy "meeting_suggestions_insert" on public.meeting_suggestions for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = meeting_suggestions.project_id and pm.user_id = auth.uid()));
+create policy "meeting_suggestions_update" on public.meeting_suggestions for update
+using (exists (select 1 from public.project_members pm where pm.project_id = meeting_suggestions.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "meeting_suggestions_delete" on public.meeting_suggestions for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = meeting_suggestions.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "file_texts_select" on public.file_texts;
+drop policy if exists "file_texts_insert" on public.file_texts;
+drop policy if exists "file_texts_update" on public.file_texts;
+drop policy if exists "file_texts_delete" on public.file_texts;
+create policy "file_texts_select" on public.file_texts for select
+using (exists (select 1 from public.project_members pm where pm.project_id = file_texts.project_id and pm.user_id = auth.uid()));
+create policy "file_texts_insert" on public.file_texts for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = file_texts.project_id and pm.user_id = auth.uid()));
+create policy "file_texts_update" on public.file_texts for update
+using (exists (select 1 from public.project_members pm where pm.project_id = file_texts.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "file_texts_delete" on public.file_texts for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = file_texts.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "file_requirements_select" on public.file_requirements;
+drop policy if exists "file_requirements_insert" on public.file_requirements;
+drop policy if exists "file_requirements_update" on public.file_requirements;
+drop policy if exists "file_requirements_delete" on public.file_requirements;
+create policy "file_requirements_select" on public.file_requirements for select
+using (exists (select 1 from public.project_members pm where pm.project_id = file_requirements.project_id and pm.user_id = auth.uid()));
+create policy "file_requirements_insert" on public.file_requirements for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = file_requirements.project_id and pm.user_id = auth.uid()));
+create policy "file_requirements_update" on public.file_requirements for update
+using (exists (select 1 from public.project_members pm where pm.project_id = file_requirements.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "file_requirements_delete" on public.file_requirements for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = file_requirements.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "documents_select" on public.documents;
+drop policy if exists "documents_insert" on public.documents;
+drop policy if exists "documents_update" on public.documents;
+drop policy if exists "documents_delete" on public.documents;
+create policy "documents_select" on public.documents for select
+using (exists (select 1 from public.project_members pm where pm.project_id = documents.project_id and pm.user_id = auth.uid()));
+create policy "documents_insert" on public.documents for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = documents.project_id and pm.user_id = auth.uid()));
+create policy "documents_update" on public.documents for update
+using (exists (select 1 from public.project_members pm where pm.project_id = documents.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "documents_delete" on public.documents for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = documents.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "document_chunks_select" on public.document_chunks;
+drop policy if exists "document_chunks_insert" on public.document_chunks;
+drop policy if exists "document_chunks_update" on public.document_chunks;
+drop policy if exists "document_chunks_delete" on public.document_chunks;
+create policy "document_chunks_select" on public.document_chunks for select
+using (exists (select 1 from public.project_members pm where pm.project_id = document_chunks.project_id and pm.user_id = auth.uid()));
+create policy "document_chunks_insert" on public.document_chunks for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = document_chunks.project_id and pm.user_id = auth.uid()));
+create policy "document_chunks_update" on public.document_chunks for update
+using (exists (select 1 from public.project_members pm where pm.project_id = document_chunks.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "document_chunks_delete" on public.document_chunks for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = document_chunks.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "sources_select" on public.sources;
+drop policy if exists "sources_insert" on public.sources;
+drop policy if exists "sources_update" on public.sources;
+drop policy if exists "sources_delete" on public.sources;
+create policy "sources_select" on public.sources for select
+using (exists (select 1 from public.project_members pm where pm.project_id = sources.project_id and pm.user_id = auth.uid()));
+create policy "sources_insert" on public.sources for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = sources.project_id and pm.user_id = auth.uid()));
+create policy "sources_update" on public.sources for update
+using (exists (select 1 from public.project_members pm where pm.project_id = sources.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "sources_delete" on public.sources for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = sources.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "chat_threads_select" on public.chat_threads;
+drop policy if exists "chat_threads_insert" on public.chat_threads;
+drop policy if exists "chat_threads_update" on public.chat_threads;
+drop policy if exists "chat_threads_delete" on public.chat_threads;
+create policy "chat_threads_select" on public.chat_threads for select
+using (exists (select 1 from public.project_members pm where pm.project_id = chat_threads.project_id and pm.user_id = auth.uid()));
+create policy "chat_threads_insert" on public.chat_threads for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = chat_threads.project_id and pm.user_id = auth.uid()));
+create policy "chat_threads_update" on public.chat_threads for update
+using (exists (select 1 from public.project_members pm where pm.project_id = chat_threads.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "chat_threads_delete" on public.chat_threads for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = chat_threads.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "chat_messages_v2_select" on public.chat_messages_v2;
+drop policy if exists "chat_messages_v2_insert" on public.chat_messages_v2;
+drop policy if exists "chat_messages_v2_update" on public.chat_messages_v2;
+drop policy if exists "chat_messages_v2_delete" on public.chat_messages_v2;
+create policy "chat_messages_v2_select" on public.chat_messages_v2 for select
+using (exists (select 1 from public.project_members pm where pm.project_id = chat_messages_v2.project_id and pm.user_id = auth.uid()));
+create policy "chat_messages_v2_insert" on public.chat_messages_v2 for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = chat_messages_v2.project_id and pm.user_id = auth.uid()));
+create policy "chat_messages_v2_update" on public.chat_messages_v2 for update
+using (exists (select 1 from public.project_members pm where pm.project_id = chat_messages_v2.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "chat_messages_v2_delete" on public.chat_messages_v2 for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = chat_messages_v2.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "ingest_jobs_select" on public.ingest_jobs;
+drop policy if exists "ingest_jobs_insert" on public.ingest_jobs;
+drop policy if exists "ingest_jobs_update" on public.ingest_jobs;
+drop policy if exists "ingest_jobs_delete" on public.ingest_jobs;
+create policy "ingest_jobs_select" on public.ingest_jobs for select
+using (exists (select 1 from public.project_members pm where pm.project_id = ingest_jobs.project_id and pm.user_id = auth.uid()));
+create policy "ingest_jobs_insert" on public.ingest_jobs for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = ingest_jobs.project_id and pm.user_id = auth.uid()));
+create policy "ingest_jobs_update" on public.ingest_jobs for update
+using (exists (select 1 from public.project_members pm where pm.project_id = ingest_jobs.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "ingest_jobs_delete" on public.ingest_jobs for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = ingest_jobs.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "ingest_warnings_select" on public.ingest_warnings;
+drop policy if exists "ingest_warnings_insert" on public.ingest_warnings;
+drop policy if exists "ingest_warnings_update" on public.ingest_warnings;
+drop policy if exists "ingest_warnings_delete" on public.ingest_warnings;
+create policy "ingest_warnings_select" on public.ingest_warnings for select
+using (exists (select 1 from public.project_members pm where pm.project_id = ingest_warnings.project_id and pm.user_id = auth.uid()));
+create policy "ingest_warnings_insert" on public.ingest_warnings for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = ingest_warnings.project_id and pm.user_id = auth.uid()));
+create policy "ingest_warnings_update" on public.ingest_warnings for update
+using (exists (select 1 from public.project_members pm where pm.project_id = ingest_warnings.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "ingest_warnings_delete" on public.ingest_warnings for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = ingest_warnings.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+
+drop policy if exists "project_schedule_tasks_select" on public.project_schedule_tasks;
+drop policy if exists "project_schedule_tasks_insert" on public.project_schedule_tasks;
+drop policy if exists "project_schedule_tasks_update" on public.project_schedule_tasks;
+drop policy if exists "project_schedule_tasks_delete" on public.project_schedule_tasks;
+create policy "project_schedule_tasks_select" on public.project_schedule_tasks for select
+using (exists (select 1 from public.project_members pm where pm.project_id = project_schedule_tasks.project_id and pm.user_id = auth.uid()));
+create policy "project_schedule_tasks_insert" on public.project_schedule_tasks for insert
+with check (exists (select 1 from public.project_members pm where pm.project_id = project_schedule_tasks.project_id and pm.user_id = auth.uid()));
+create policy "project_schedule_tasks_update" on public.project_schedule_tasks for update
+using (exists (select 1 from public.project_members pm where pm.project_id = project_schedule_tasks.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "project_schedule_tasks_delete" on public.project_schedule_tasks for delete
+using (exists (select 1 from public.project_members pm where pm.project_id = project_schedule_tasks.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
