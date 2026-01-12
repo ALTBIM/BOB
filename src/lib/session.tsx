@@ -1,54 +1,100 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { User } from "./database";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { getSupabaseBrowserClient } from "@/lib/supabase-client";
+import type { UserRole } from "@/lib/database";
 
-type SessionContextValue = {
-  user: User | null;
-  ready: boolean;
-  login: (user: User) => void;
-  logout: () => void;
-  demoContentEnabled: boolean;
-  setDemoContentEnabled: (value: boolean) => void;
+export type SessionUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  company?: string;
 };
 
+type SessionContextValue = {
+  user: SessionUser | null;
+  ready: boolean;
+  accessToken: string | null;
+  signInWithPassword: (email: string, password: string) => Promise<{ error?: string }>;
+  signInWithMagicLink: (email: string) => Promise<{ error?: string }>;
+  logout: () => Promise<void>;
+};
+
+const DEFAULT_ROLE: UserRole = "byggherre";
 const SessionContext = createContext<SessionContextValue | undefined>(undefined);
 
+function toSessionUser(user: SupabaseUser | null): SessionUser | null {
+  if (!user) return null;
+  const meta = (user.user_metadata || {}) as Record<string, string>;
+  const name = meta.full_name || meta.name || user.email?.split("@")[0] || "Ukjent bruker";
+  return {
+    id: user.id,
+    email: user.email || "",
+    name,
+    role: (meta.role as UserRole) || DEFAULT_ROLE,
+    company: meta.company || undefined,
+  };
+}
+
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  const [demoContentEnabled, setDemoContentEnabledState] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const saved = localStorage.getItem("bob_user");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as User;
-        setUser(parsed);
-      } catch {
-        localStorage.removeItem("bob_user");
-      }
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setReady(true);
+      return;
     }
 
-    const demoToggle = localStorage.getItem("bob_demo_content_enabled");
-    if (demoToggle) {
-      setDemoContentEnabledState(demoToggle === "true");
-    }
-    setReady(true);
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setUser(toSessionUser(data.session?.user ?? null));
+      setAccessToken(data.session?.access_token ?? null);
+      setReady(true);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setUser(toSessionUser(session?.user ?? null));
+      setAccessToken(session?.access_token ?? null);
+      setReady(true);
+    });
+
+    return () => {
+      mounted = false;
+      authListener?.subscription?.unsubscribe();
+    };
   }, []);
 
-  const login = (u: User) => {
-    setUser(u);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("bob_user", JSON.stringify(u));
-    }
+  const signInWithPassword = async (email: string, password: string) => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return { error: "Supabase ikke konfigurert." };
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { error: error.message };
+    return {};
   };
 
-  const logout = () => {
-    setUser(null);
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("bob_user");
+  const signInWithMagicLink = async (email: string) => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return { error: "Supabase ikke konfigurert." };
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined },
+    });
+    if (error) return { error: error.message };
+    return {};
+  };
+
+  const logout = async () => {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      await supabase.auth.signOut();
     }
   };
 
@@ -56,17 +102,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user,
       ready,
-      login,
+      accessToken,
+      signInWithPassword,
+      signInWithMagicLink,
       logout,
-      demoContentEnabled,
-      setDemoContentEnabled: (value: boolean) => {
-        setDemoContentEnabledState(value);
-        if (typeof window !== "undefined") {
-          localStorage.setItem("bob_demo_content_enabled", String(value));
-        }
-      }
     }),
-    [demoContentEnabled, login, logout, ready, user]
+    [accessToken, logout, ready, user]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

@@ -4,10 +4,9 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import LoginForm from "@/components/auth/LoginForm";
 import { useSession } from "@/lib/session";
-import { User } from "@/lib/database";
 
 export default function AppEntry() {
-  const { user, ready, login } = useSession();
+  const { user, ready } = useSession();
   const router = useRouter();
 
   useEffect(() => {
@@ -17,7 +16,7 @@ export default function AppEntry() {
   }, [user, ready, router]);
 
   if (!user && ready) {
-    return <LoginForm onLogin={(u: User) => login(u)} />;
+    return <LoginForm />;
   }
 
   return null;

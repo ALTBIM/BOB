@@ -15,6 +15,7 @@ import { parseIfcFile, IFCElementSummary } from "@/lib/ifc-parser";
 import { IfcViewerPanel } from "./IfcViewerPanel";
 import { listIfcFiles } from "@/lib/storage";
 import { ProjectFiles } from "@/components/files/ProjectFiles";
+import { useSession } from "@/lib/session";
 
 interface ProductionDashboardProps {
   selectedProject: string | null;
@@ -66,6 +67,7 @@ interface ModelFile {
 }
 
 export default function ProductionDashboard({ selectedProject }: ProductionDashboardProps) {
+  const { accessToken } = useSession();
   const [selectedModel, setSelectedModel] = useState<string>("");
   const search = typeof window !== "undefined" ? window.location.search : "";
   const [activeTab, setActiveTab] = useState("quantities");
@@ -149,7 +151,10 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         const res = await fetch(
           `/api/ifc/metadata?projectId=${encodeURIComponent(selectedProject)}&modelId=${encodeURIComponent(
             selectedModel
-          )}`
+          )}`,
+          {
+            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+          }
         );
         if (!res.ok) {
           setElementSummary([]);
@@ -167,7 +172,10 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
               const parsed = await parseIfcFile(parsedFile);
               await fetch("/api/ifc/metadata", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                },
                 body: JSON.stringify({
                   projectId: selectedProject,
                   modelId: selectedModel,
@@ -401,7 +409,10 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
       // lagre metadata til server/fil for senere visning
       fetch("/api/ifc/metadata", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
         body: JSON.stringify({
           projectId: file.projectId,
           modelId: created.id,
@@ -491,7 +502,10 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
     try {
       const res = await fetch("/api/ifc/process", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
         body: JSON.stringify({ projectId: selectedProject, modelId: selectedModel, fileUrl }),
       });
       if (!res.ok) {
@@ -542,7 +556,9 @@ export default function ProductionDashboard({ selectedProject }: ProductionDashb
         encodeURIComponent(fieldValues.join(","));
 
       const fetchRows = async () => {
-        const res = await fetch(buildUrl());
+        const res = await fetch(buildUrl(), {
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        });
         if (!res.ok) {
           throw new Error("Quantities API feilet (" + res.status + ")");
         }

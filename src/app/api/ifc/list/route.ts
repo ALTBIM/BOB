@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getAuthUser, requireProjectMembership } from "@/lib/supabase-auth";
 import { list } from "@vercel/blob";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_IFC_BUCKET || "ifc-models";
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN || process.env.NEXT_PUBLIC_BLOB_READ_WRITE_TOKEN || "";
+const SIGNED_URL_TTL = 60 * 60;
 
 const normalizeName = (name: string) => name.replace(/^\d{10,}-/, "");
 const parseVersion = (name: string) => {
@@ -18,67 +20,85 @@ export async function GET(request: Request) {
   const projectId = searchParams.get("projectId") || "";
   const includeArchived = searchParams.get("includeArchived") === "1";
 
+  if (!projectId) {
+    return NextResponse.json({ error: "Mangler projectId" }, { status: 400 });
+  }
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json({ files: [] });
+  }
+
+  const { user, error: authError } = await getAuthUser(request);
+  if (!user) {
+    return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+  }
+
+  const membership = await requireProjectMembership(supabase, projectId, user.id);
+  if (!membership.ok) {
+    return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
+  }
+
   const files: Array<{
     path: string;
     name: string;
     size: number;
-    publicUrl: string;
+    publicUrl: string | null;
     uploadedAt?: string;
     provider: string;
     version?: number;
     archived?: boolean;
   }> = [];
 
-  const supabase = getSupabaseServerClient();
   const dbPaths = new Set<string>();
-  if (supabase) {
-    // Persisted metadata if tables finnes
-    try {
+  try {
     const query = supabase.from("files").select("*").order("uploaded_at", { ascending: false }).limit(200);
-    const { data: dbFiles, error: dbErr } = projectId ? await query.eq("project_id", projectId) : await query;
+    const { data: dbFiles, error: dbErr } = await query.eq("project_id", projectId);
 
     if (!dbErr && dbFiles) {
-      dbFiles.forEach((f: any) => {
+      for (const f of dbFiles) {
         if (f?.path) dbPaths.add(f.path);
-        if (!includeArchived && f.metadata?.archived) return;
+        if (!includeArchived && f.metadata?.archived) continue;
+        const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(f.path, SIGNED_URL_TTL);
         files.push({
           path: f.path,
           name: f.name,
           size: f.size || 0,
           uploadedAt: f.uploaded_at,
-          publicUrl: f.storage_url,
+          publicUrl: signed?.signedUrl || null,
           provider: f.source_provider || "supabase",
           version: Number(f.metadata?.version) || 1,
           archived: Boolean(f.metadata?.archived),
         });
-      });
+      }
     }
-    } catch (err) {
-      console.warn("DB files list feilet (ignorerer)", err);
-    }
+  } catch (err) {
+    console.warn("DB files list feilet (ignorerer)", err);
+  }
 
+  try {
     const supaPath = projectId ? `${projectId}` : "";
     const { data, error } = await supabase.storage.from(BUCKET).list(supaPath, { limit: 200 });
     if (!error && data) {
-      data
-        .filter((item) => !item.name.endsWith("/"))
-        .forEach((item) => {
-          const fullPath = supaPath ? `${supaPath}/${item.name}` : item.name;
-          if (dbPaths.has(fullPath)) return;
-          const { data: publicData } = supabase.storage.from(BUCKET).getPublicUrl(fullPath);
-          const parsed = parseVersion(item.name);
-          files.push({
-            path: fullPath,
-            name: normalizeName(parsed.clean),
-            size: item.metadata?.size ?? 0,
-            uploadedAt: item.created_at,
-            publicUrl: publicData.publicUrl,
-            provider: "supabase",
-            version: parsed.version,
-            archived: false,
-          });
+      for (const item of data.filter((i) => !i.name.endsWith("/"))) {
+        const fullPath = supaPath ? `${supaPath}/${item.name}` : item.name;
+        if (dbPaths.has(fullPath)) continue;
+        const parsed = parseVersion(item.name);
+        const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(fullPath, SIGNED_URL_TTL);
+        files.push({
+          path: fullPath,
+          name: normalizeName(parsed.clean),
+          size: item.metadata?.size ?? 0,
+          uploadedAt: item.created_at,
+          publicUrl: signed?.signedUrl || null,
+          provider: "supabase",
+          version: parsed.version,
+          archived: false,
         });
+      }
     }
+  } catch (err) {
+    console.warn("Supabase storage list feilet", err);
   }
 
   if (BLOB_TOKEN) {
@@ -103,7 +123,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // Deduplicate by path (prefer Supabase entry if both exist)
   const deduped = Array.from(
     files.reduce((map, f) => {
       if (!map.has(f.path)) map.set(f.path, f);

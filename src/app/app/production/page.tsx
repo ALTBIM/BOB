@@ -7,11 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Building2 } from "lucide-react";
 import LoginForm from "@/components/auth/LoginForm";
 import { useSession } from "@/lib/session";
-import { db, Project, User } from "@/lib/database";
+import { db, Project } from "@/lib/database";
 import ProductionDashboard from "@/components/production/ProductionDashboard";
 
 export default function ProductionPage() {
-  const { user, ready, login } = useSession();
+  const { user, ready } = useSession();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -49,7 +49,7 @@ export default function ProductionPage() {
   }, [selectedProject]);
 
   if (!user && ready) {
-    return <LoginForm onLogin={(u: User) => login(u)} />;
+    return <LoginForm />;
   }
 
   return (

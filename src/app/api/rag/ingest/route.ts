@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { upsertDocument, SourceDocument } from "@/lib/rag";
+import { ingestTextDocument } from "@/lib/ingest";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getAuthUser, requireProjectMembership } from "@/lib/supabase-auth";
 
 export const runtime = "nodejs";
 
@@ -10,9 +12,6 @@ type IngestBody = {
   reference: string;
   zone?: string;
   text: string;
-  id?: string;
-  userId?: string;
-  role?: string;
 };
 
 export async function POST(request: Request) {
@@ -21,36 +20,35 @@ export async function POST(request: Request) {
 
   if (!projectId || !title || !discipline || !reference || !text) {
     return NextResponse.json(
-      { error: "projectId, title, discipline, reference og text er påkrevd" },
+      { error: "projectId, title, discipline, reference og text er p\u00e5krevd" },
       { status: 400 }
     );
   }
 
-  const trimmedProject = projectId.trim();
-  if (!trimmedProject) {
-    return NextResponse.json({ error: "Ugyldig projectId" }, { status: 400 });
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json({ error: "Supabase ikke konfigurert" }, { status: 500 });
+  }
+  const { user, error: authError } = await getAuthUser(request);
+  if (!user) {
+    return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+  }
+  const membership = await requireProjectMembership(supabase, projectId, user.id);
+  if (!membership.ok) {
+    return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
   }
 
-  const doc: SourceDocument = {
-    id: body.id || `doc-${Date.now()}`,
-    projectId: trimmedProject,
-    title,
-    discipline,
-    reference,
-    zone: body.zone,
-    text,
-  };
-
   try {
-    await upsertDocument(doc);
-    return NextResponse.json({
-      ok: true,
-      doc,
-      meta: {
-        userId: body.userId || "ukjent",
-        role: body.role || "ukjent",
-      },
+    const result = await ingestTextDocument({
+      projectId,
+      title,
+      discipline,
+      reference,
+      sourceType: "manual",
+      text,
+      userId: user.id,
     });
+    return NextResponse.json({ ok: true, result });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || "Kunne ikke lagre dokument" }, { status: 500 });
   }

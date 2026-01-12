@@ -5,8 +5,12 @@ import { MessageCircle, Search, Send, Plus, Trash2, BookOpen, Shield, History, I
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { v4 as uuid } from "uuid";
 import { useSession } from "@/lib/session";
+import { db, Project } from "@/lib/database";
+import { getSupabaseBrowserClient } from "@/lib/supabase-client";
+import LoginForm from "@/components/auth/LoginForm";
 
 interface Conversation {
   id: string;
@@ -83,7 +87,9 @@ const defaultMessages: Record<string, ChatMessage[]> = {
 };
 
 export default function ChatPage() {
-  const [projectId, setProjectId] = useState("demo-project");
+  const [projectId, setProjectId] = useState("");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectRole, setProjectRole] = useState("ukjent");
   const [conversations, setConversations] = useState<Conversation[]>(defaultConversations);
   const [messagesByConversation, setMessagesByConversation] = useState<Record<string, ChatMessage[]>>(defaultMessages);
   const [activeConversationId, setActiveConversationId] = useState("1");
@@ -94,11 +100,82 @@ export default function ChatPage() {
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
   const [newMemoryText, setNewMemoryText] = useState("");
   const [sourcesByConversation, setSourcesByConversation] = useState<Record<string, RetrievedSource[]>>({});
-  const { user } = useSession();
+  const [chatError, setChatError] = useState<string | null>(null);
+  const { user, accessToken, ready } = useSession();
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
+  if (!user && ready) {
+    return <LoginForm />;
+  }
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-sm text-muted-foreground">Laster...</div>
+      </div>
+    );
+  }
+
   useEffect(() => {
+    if (!ready) return;
+    if (!user) {
+      setProjects([]);
+      setProjectId("");
+      return;
+    }
+    const load = async () => {
+      try {
+        const list = await db.getProjectsForUser(user.id);
+        setProjects(list);
+        if (typeof window === "undefined") return;
+        const stored = window.localStorage.getItem("bob_selected_project");
+        const storedValid = stored && list.some((p) => p.id === stored);
+        const nextId = storedValid ? stored! : list[0]?.id || "";
+        setProjectId(nextId);
+      } catch (err) {
+        console.warn("Klarte ikke hente prosjekter", err);
+        setProjects([]);
+        setProjectId("");
+      }
+    };
+    load();
+  }, [user, ready]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (projectId) {
+      window.localStorage.setItem("bob_selected_project", projectId);
+    } else {
+      window.localStorage.removeItem("bob_selected_project");
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!user || !projectId) {
+      setProjectRole("ukjent");
+      return;
+    }
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    supabase
+      .from("project_members")
+      .select("role")
+      .eq("project_id", projectId)
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn("Kunne ikke hente prosjektrolle", error);
+          setProjectRole("ukjent");
+          return;
+        }
+        setProjectRole(data?.role || "ukjent");
+      });
+  }, [projectId, user]);
+
+  useEffect(() => {
+    if (!projectId) return;
     const conv = loadFromStorage<Conversation[]>(`bob_conversations_${projectId}`, defaultConversations);
     const msgs = loadFromStorage<Record<string, ChatMessage[]>>(`bob_messages_${projectId}`, defaultMessages);
     const mem = loadFromStorage<MemoryItem[]>(`bob_memory_${projectId}`, []);
@@ -109,14 +186,17 @@ export default function ChatPage() {
   }, [projectId]);
 
   useEffect(() => {
+    if (!projectId) return;
     saveToStorage(`bob_conversations_${projectId}`, conversations);
   }, [conversations, projectId]);
 
   useEffect(() => {
+    if (!projectId) return;
     saveToStorage(`bob_messages_${projectId}`, messagesByConversation);
   }, [messagesByConversation, projectId]);
 
   useEffect(() => {
+    if (!projectId) return;
     saveToStorage(`bob_memory_${projectId}`, memoryItems);
   }, [memoryItems, projectId]);
 
@@ -130,7 +210,16 @@ export default function ChatPage() {
   const handleSend = async () => {
     const text = input.trim();
     if (!text) return;
+    if (!projectId) {
+      setChatError("Velg et prosjekt f\u00f8r du sender melding.");
+      return;
+    }
+    if (!accessToken) {
+      setChatError("Mangler p\u00e5logging. Logg inn p\u00e5 nytt.");
+      return;
+    }
     setInput("");
+    setChatError(null);
 
     const userMsg: ChatMessage = {
       id: uuid(),
@@ -157,15 +246,13 @@ export default function ChatPage() {
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({
           message: text,
           projectId,
           style: styleMode,
           sources: withSources,
           memory: memoryItems,
-          role: user?.role ?? "ukjent",
-          userId: user?.id ?? "anonymous",
         }),
       });
 
@@ -328,11 +415,23 @@ export default function ChatPage() {
             <div>
               <p className="text-sm text-muted-foreground">Prosjekt</p>
               <div className="flex items-center gap-2">
-                <Input
-                  value={projectId}
-                  onChange={(e) => setProjectId(e.target.value || "demo-project")}
-                  className="w-48 bg-background"
-                />
+                <Select value={projectId} onValueChange={setProjectId}>
+                  <SelectTrigger className="w-64 bg-background">
+                    <SelectValue placeholder="Velg prosjekt..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.length === 0 && (
+                      <SelectItem value="__none" disabled>
+                        Ingen prosjekter tilgjengelig
+                      </SelectItem>
+                    )}
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Badge variant="secondary">Chatmodus</Badge>
               </div>
             </div>
@@ -361,6 +460,11 @@ export default function ChatPage() {
             <span>BOB svarer med Konklusjon / Basis / Anbefalinger / Forutsetninger</span>
           </div>
         </header>
+        {chatError && (
+          <div className="border-b border-border bg-muted/60 px-4 py-2 text-sm text-destructive">
+            {chatError}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] border-b border-border">
           <div className="flex-1 overflow-auto p-4 space-y-3 bg-muted">
@@ -429,6 +533,7 @@ export default function ChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               className="flex-1"
+              disabled={!projectId || !accessToken}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -436,7 +541,7 @@ export default function ChatPage() {
                 }
               }}
             />
-            <Button type="button" disabled={!input.trim() || isSending} onClick={handleSend}>
+            <Button type="button" disabled={!input.trim() || isSending || !projectId || !accessToken} onClick={handleSend}>
               <Send className="h-4 w-4 mr-2" />
               {isSending ? "Sender..." : "Send"}
             </Button>
@@ -487,7 +592,7 @@ export default function ChatPage() {
             <span>Prosjektisolert -> Ingen deling mellom prosjekter</span>
           </div>
           <div className="text-[11px] text-muted-foreground">
-            Rolle: {user?.role || "ukjent"} -> Bruker: {user?.name || "ukjent"}
+            Rolle: {projectRole} \u2192 Bruker: {user?.email || "ukjent"}
           </div>
         </div>
       </aside>

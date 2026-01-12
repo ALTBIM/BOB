@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -9,13 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Building2, Calendar, CheckCircle, Search } from "lucide-react";
 import LoginForm from "@/components/auth/LoginForm";
 import ProjectCreationModal from "@/components/projects/ProjectCreationModal";
-import { User, Project, db, getRoleDisplayName } from "@/lib/database";
+import { Project, db, getRoleDisplayName } from "@/lib/database";
 import { useSession } from "@/lib/session";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { DocumentIngestPanel } from "@/components/rag/DocumentIngestPanel";
 
 export default function HomePage() {
-  const { user, ready, login, logout, demoContentEnabled, setDemoContentEnabled } = useSession();
+  const { user, ready, logout } = useSession();
   const [isLoading, setIsLoading] = useState(true);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
@@ -64,17 +64,9 @@ export default function HomePage() {
     }
   };
 
-  const handleLogin = (userData: User) => {
-    login(userData);
-  };
-
   const handleLogout = () => {
     logout();
     setSelectedProject(null);
-  };
-
-  const handleToggleDemoContent = () => {
-    setDemoContentEnabled(!demoContentEnabled);
   };
 
   const handleProjectCreate = (newProject: Project) => {
@@ -82,7 +74,7 @@ export default function HomePage() {
   };
 
   if (!user) {
-    return <LoginForm onLogin={handleLogin} />;
+    return <LoginForm />;
   }
 
   if (isLoading) {
@@ -121,7 +113,7 @@ export default function HomePage() {
             <div className="flex-1 max-w-xl mx-6 hidden md:block">
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Søk prosjekter, brukere, filer..." className="pl-10 bg-muted border-border/70" />
+                <Input placeholder="S\u00f8k prosjekter, brukere, filer..." className="pl-10 bg-muted border-border/70" />
               </div>
             </div>
 
@@ -157,16 +149,6 @@ export default function HomePage() {
                 <div className="bg-primary/10 text-primary-foreground flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold">
                   {userInitials}
                 </div>
-                {user.role === "super_admin" && (
-                  <Button
-                    variant={demoContentEnabled ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={handleToggleDemoContent}
-                    className="whitespace-nowrap"
-                  >
-                    {demoContentEnabled ? "Slå av demo" : "Slå på demo"}
-                  </Button>
-                )}
                 <ThemeToggle />
                 <Button variant="ghost" size="sm" onClick={handleLogout}>
                   Logg ut
@@ -181,7 +163,7 @@ export default function HomePage() {
         <div className="flex flex-col gap-2">
           <h2 className="text-2xl font-semibold">Velkommen til BOB</h2>
           <p className="text-muted-foreground">
-            Ditt digitale verktøy for byggeprosjekter som kobler BIM-modeller direkte til produksjon, logistikk og
+            Ditt digitale verkt\u00f8y for byggeprosjekter som kobler BIM-modeller direkte til produksjon, logistikk og
             kvalitetskontroller.
           </p>
         </div>
@@ -207,7 +189,7 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold tracking-tight">24</div>
-              <p className="text-xs text-muted-foreground">Denne måneden</p>
+              <p className="text-xs text-muted-foreground">Denne m\u00e5neden</p>
             </CardContent>
           </Card>
           <Card className="border border-border bg-card shadow-none">
@@ -217,12 +199,12 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold tracking-tight">12</div>
-              <p className="text-xs text-muted-foreground">8 bestått, 4 venter</p>
+              <p className="text-xs text-muted-foreground">8 best\u00e5tt, 4 venter</p>
             </CardContent>
           </Card>
           <Card className="border border-border bg-card shadow-none">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Planlagte møter</CardTitle>
+              <CardTitle className="text-sm font-medium">Planlagte m\u00f8ter</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -287,13 +269,7 @@ export default function HomePage() {
                 <CardDescription>Tekstuttrekk for chat/kontroller fra prosjektets dokumenter.</CardDescription>
               </CardHeader>
               <CardContent>
-                {demoContentEnabled ? (
-                  <DocumentIngestPanel projectId={selectedProject} />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Demo-innhold er slått av. Slå det på igjen fra toppmenyen for å teste dokumentflyten.
-                  </p>
-                )}
+                <DocumentIngestPanel projectId={selectedProject} />
               </CardContent>
             </Card>
           )}
@@ -302,3 +278,5 @@ export default function HomePage() {
     </div>
   );
 }
+
+

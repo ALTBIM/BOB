@@ -22,6 +22,7 @@ import { db } from "@/lib/database";
 import { recordModelMaterials } from "@/lib/material-store";
 import { parseIfcFile, IFCElementSummary } from "@/lib/ifc-parser";
 import { uploadIfcFile, listAllFiles, uploadGenericFile } from "@/lib/storage";
+import { useSession } from "@/lib/session";
 
 interface ModelUploadProps {
   selectedProject: string | null;
@@ -55,6 +56,7 @@ interface ModelFile {
 }
 
 export default function ModelUpload({ selectedProject }: ModelUploadProps) {
+  const { accessToken } = useSession();
   const [files, setFiles] = useState<ModelFile[]>([]);
   const [existingFiles, setExistingFiles] = useState<ModelFile[]>([]);
   const [isUploadingDocs, setIsUploadingDocs] = useState(false);
@@ -195,7 +197,10 @@ export default function ModelUpload({ selectedProject }: ModelUploadProps) {
       await persistModelToStore(updated, materials);
       fetch("/api/ifc/metadata", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
         body: JSON.stringify({
           projectId: updated.projectId,
           modelId: updated.modelId || updated.id,

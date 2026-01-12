@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, FolderOpen, ExternalLink } from "lucide-react";
 import LoginForm from "@/components/auth/LoginForm";
 import { useSession } from "@/lib/session";
-import { db, Project, User } from "@/lib/database";
+import { db, Project } from "@/lib/database";
 import { listIfcFiles } from "@/lib/storage";
 
 interface ModelRow {
@@ -22,7 +22,7 @@ interface ModelRow {
 }
 
 export default function ModelsPage() {
-  const { user, ready, login } = useSession();
+  const { user, ready } = useSession();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -101,7 +101,7 @@ export default function ModelsPage() {
   );
 
   if (!user && ready) {
-    return <LoginForm onLogin={(u: User) => login(u)} />;
+    return <LoginForm />;
   }
 
   return (

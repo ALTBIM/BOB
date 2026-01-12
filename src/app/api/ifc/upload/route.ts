@@ -1,10 +1,12 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getAuthUser, requireProjectMembership } from "@/lib/supabase-auth";
 import { processIfcBuffer } from "@/lib/ifc-processor";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_IFC_BUCKET || "ifc-models";
 const MAX_SIZE_MB = 500;
+const SIGNED_URL_TTL = 60 * 60;
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN || process.env.NEXT_PUBLIC_BLOB_READ_WRITE_TOKEN || "";
 const sanitizeFilename = (filename: string) => filename.replace(/[^\w.\-]+/g, "_");
 const splitName = (filename: string) => {
@@ -18,18 +20,18 @@ const splitName = (filename: string) => {
 const persistRecord = async (params: {
   projectId: string;
   path: string;
-  storageUrl: string;
+  storagePath: string;
   file: File;
   provider: string;
   version: number;
   previous: Array<{ id: string; metadata?: Record<string, any> | null }>;
+  uploadedBy: string;
 }) => {
   const supabase = getSupabaseServerClient();
   if (!supabase) return { fileId: undefined, modelId: undefined };
 
-  const { projectId, path, storageUrl, file, provider, version, previous } = params;
+  const { projectId, path, storagePath, file, provider, version, previous, uploadedBy } = params;
   const uploadedAt = new Date().toISOString();
-  const uploadedBy = "system";
 
   try {
     const filePayload = {
@@ -39,7 +41,7 @@ const persistRecord = async (params: {
       type: file.type || "application/octet-stream",
       size: file.size,
       description: "IFC-fil",
-      storage_url: storageUrl,
+      storage_url: null,
       source_provider: provider,
       uploaded_by: uploadedBy,
       uploaded_at: uploadedAt,
@@ -49,6 +51,8 @@ const persistRecord = async (params: {
         archived: false,
         originalName: file.name,
         ext: splitName(file.name).ext,
+        bucket: BUCKET,
+        storagePath,
       },
     };
 
@@ -75,7 +79,7 @@ const persistRecord = async (params: {
           file_id: fileRow?.id,
           version,
           status: "completed",
-          storage_url: storageUrl,
+          storage_url: null,
           uploaded_at: uploadedAt,
           uploaded_by: uploadedBy,
           name: file.name,
@@ -99,6 +103,11 @@ const persistRecord = async (params: {
 export async function POST(request: Request) {
   const supabase = getSupabaseServerClient();
 
+  const { user, error: authError } = await getAuthUser(request);
+  if (!user) {
+    return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+  }
+
   const form = await request.formData();
   const file = form.get("file") as File | null;
   const projectId = (form.get("projectId") as string) || "";
@@ -111,9 +120,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Filen er for stor (maks ${MAX_SIZE_MB} MB)` }, { status: 400 });
   }
 
+  const membership = await requireProjectMembership(supabase, projectId, user.id);
+  if (!membership.ok) {
+    return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
+  }
+
   const ext = file.name.split(".").pop() || "ifc";
   if (!["ifc", "ifczip"].includes(ext.toLowerCase())) {
-    return NextResponse.json({ error: "Kun .ifc eller .ifczip er støttet" }, { status: 400 });
+    return NextResponse.json({ error: "Kun .ifc eller .ifczip er stottet" }, { status: 400 });
   }
 
   const safeName = sanitizeFilename(file.name);
@@ -136,37 +150,37 @@ export async function POST(request: Request) {
       version = maxVersion + 1;
     }
   }
-  const path = `${projectId}/${nameParts.stem}__v${version}${nameParts.ext ? `.${nameParts.ext}` : ""}`;
+  const storagePath = `${projectId}/${nameParts.stem}__v${version}${nameParts.ext ? `.${nameParts.ext}` : ""}`;
   const buffer = new Uint8Array(await file.arrayBuffer());
 
-  // Try Supabase first if configured
   if (supabase) {
-    const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+    const { error } = await supabase.storage.from(BUCKET).upload(storagePath, file, {
       cacheControl: "3600",
       upsert: true,
       contentType: file.type || "application/octet-stream",
     });
 
     if (!error) {
-      const { data: publicData } = supabase.storage.from(BUCKET).getPublicUrl(path);
+      const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, SIGNED_URL_TTL);
       const persisted = await persistRecord({
         projectId,
-        path,
-        storageUrl: publicData.publicUrl,
+        path: storagePath,
+        storagePath,
         file,
         provider: "supabase",
         version,
         previous,
+        uploadedBy: user.id,
       });
-      const modelId = persisted.modelId || path;
+      const modelId = persisted.modelId || storagePath;
       try {
         await processIfcBuffer({ buffer, modelId, projectId });
       } catch (err) {
         console.warn("IFC processing feilet (supabase)", err);
       }
       return NextResponse.json({
-        path,
-        publicUrl: publicData.publicUrl,
+        path: storagePath,
+        publicUrl: signed?.signedUrl || null,
         provider: "supabase",
         fileId: persisted.fileId,
         modelId,
@@ -177,10 +191,9 @@ export async function POST(request: Request) {
     console.error("Supabase upload error", error);
   }
 
-  // Fallback to Vercel Blob if configured
   if (BLOB_TOKEN) {
     try {
-      const blob = await put(path, file, {
+      const blob = await put(storagePath, file, {
         access: "public",
         token: BLOB_TOKEN,
         contentType: file.type || "application/octet-stream",
@@ -188,21 +201,22 @@ export async function POST(request: Request) {
       });
       const persisted = await persistRecord({
         projectId,
-        path: blob.pathname || path,
-        storageUrl: blob.url,
+        path: blob.pathname || storagePath,
+        storagePath: blob.pathname || storagePath,
         file,
         provider: "vercel-blob",
         version,
         previous,
+        uploadedBy: user.id,
       });
-      const modelId = persisted.modelId || blob.pathname || path;
+      const modelId = persisted.modelId || blob.pathname || storagePath;
       try {
         await processIfcBuffer({ buffer, modelId, projectId });
       } catch (err) {
         console.warn("IFC processing feilet (blob)", err);
       }
       return NextResponse.json({
-        path: blob.pathname || path,
+        path: blob.pathname || storagePath,
         publicUrl: blob.url,
         provider: "vercel-blob",
         fileId: persisted.fileId,
@@ -215,6 +229,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ error: "Ingen lagringsløsning er konfigurert" }, { status: 500 });
+  return NextResponse.json({ error: "Ingen lagringslosning er konfigurert" }, { status: 500 });
 }
-

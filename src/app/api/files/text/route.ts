@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getAuthUser, requireProjectMembership } from "@/lib/supabase-auth";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -16,6 +17,21 @@ export async function GET(request: Request) {
   }
 
   try {
+    const { user, error: authError } = await getAuthUser(request);
+    if (!user) {
+      return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+    }
+
+    const { data: fileRow } = await supabase.from("files").select("project_id").eq("id", fileId).maybeSingle();
+    if (!fileRow?.project_id) {
+      return NextResponse.json({ error: "Fant ikke fil" }, { status: 404 });
+    }
+
+    const membership = await requireProjectMembership(supabase, fileRow.project_id, user.id);
+    if (!membership.ok) {
+      return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
+    }
+
     const { data: textRow, error: textErr } = await supabase
       .from("file_texts")
       .select("*")

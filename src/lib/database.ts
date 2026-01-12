@@ -1,5 +1,6 @@
-// Database abstraction layer for BOB
+﻿// Database abstraction layer for BOB
 // This provides a clean interface for data operations
+import { getSupabaseBrowserClient } from "@/lib/supabase-client";
 
 export interface User {
   id: string;
@@ -54,12 +55,53 @@ export interface BIMModel {
 }
 
 // Enums for type safety
-export type UserRole = 'super_admin' | 'company_admin' | 'project_admin' | 'architect' | 'engineer' | 'contractor' | 'supplier' | 'client';
+export type UserRole =
+  | 'byggherre'
+  | 'prosjektleder'
+  | 'bas_byggeledelse'
+  | 'prosjekterende_ark'
+  | 'prosjekterende_rib'
+  | 'prosjekterende_riv'
+  | 'prosjekterende_rie'
+  | 'leverandor_logistikk'
+  | 'kvalitet_hms';
 export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'completed' | 'cancelled';
 export type ProjectType = 'residential' | 'commercial' | 'industrial' | 'infrastructure' | 'renovation';
-export type ProjectRole = 'admin' | 'manager' | 'designer' | 'contractor' | 'supplier' | 'viewer';
+export type ProjectRole = UserRole;
 export type Permission = 'read' | 'write' | 'delete' | 'manage_users' | 'manage_models' | 'generate_lists' | 'run_controls';
 export type ModelStatus = 'uploading' | 'processing' | 'completed' | 'error';
+
+const normalizeProject = (row: any, member?: any): Project => {
+  const createdAt = row?.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString();
+  const status = (row?.status as ProjectStatus) || 'active';
+  const type = (row?.type as ProjectType) || 'commercial';
+  const teamMembers: ProjectMember[] = member
+    ? [
+        {
+          userId: member.user_id,
+          projectId: row.id,
+          role: (member.role as ProjectRole) || 'byggherre',
+          permissions: (member.permissions as Permission[]) || [],
+          addedAt: member.created_at ? new Date(member.created_at).toISOString() : createdAt,
+          addedBy: member.added_by || member.user_id,
+        },
+      ]
+    : [];
+
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || '',
+    status,
+    progress: Number(row.progress ?? 0),
+    client: row.client || undefined,
+    location: row.location || undefined,
+    type,
+    createdAt,
+    createdBy: row.created_by || '',
+    teamMembers,
+  };
+};
 
 // Mock database implementation
 class MockDatabase {
@@ -73,7 +115,7 @@ class MockDatabase {
       id: 'admin-1',
       name: 'BOB Administrator',
       email: 'admin@bob.no',
-      role: 'super_admin',
+      role: 'prosjektleder',
       company: 'ALTBIM',
       phone: '+47 000 00 000',
       createdAt: '2024-01-01T00:00:00Z',
@@ -84,7 +126,7 @@ class MockDatabase {
       id: '1',
       name: 'Andreas Hansen',
       email: 'andreas@altbim.no',
-      role: 'company_admin',
+      role: 'byggherre',
       company: 'AltBIM Solutions AS',
       phone: '+47 123 45 678',
       createdAt: '2024-01-01T00:00:00Z',
@@ -95,7 +137,7 @@ class MockDatabase {
       id: '2',
       name: 'Erik Hansen',
       email: 'erik@drammen-sykehus.no',
-      role: 'architect',
+      role: 'prosjekterende_ark',
       company: 'Drammen Arkitekter AS',
       phone: '+47 987 65 432',
       createdAt: '2024-01-02T00:00:00Z',
@@ -106,7 +148,7 @@ class MockDatabase {
       id: '3',
       name: 'Maria Olsen',
       email: 'maria@byggmester.no',
-      role: 'contractor',
+      role: 'bas_byggeledelse',
       company: 'Byggmester Olsen AS',
       phone: '+47 555 12 345',
       createdAt: '2024-01-03T00:00:00Z',
@@ -131,7 +173,7 @@ class MockDatabase {
         {
           userId: '1',
           projectId: 'project-1',
-          role: 'admin',
+          role: 'prosjektleder',
           permissions: ['read', 'write', 'delete', 'manage_users', 'manage_models', 'generate_lists', 'run_controls'],
           addedAt: '2024-01-01T00:00:00Z',
           addedBy: '1'
@@ -139,7 +181,7 @@ class MockDatabase {
         {
           userId: '2',
           projectId: 'project-1',
-          role: 'designer',
+          role: 'prosjekterende_ark',
           permissions: ['read', 'write', 'manage_models', 'generate_lists'],
           addedAt: '2024-01-02T00:00:00Z',
           addedBy: '1'
@@ -147,7 +189,7 @@ class MockDatabase {
         {
           userId: '3',
           projectId: 'project-1',
-          role: 'contractor',
+          role: 'bas_byggeledelse',
           permissions: ['read', 'generate_lists'],
           addedAt: '2024-01-03T00:00:00Z',
           addedBy: '1'
@@ -169,7 +211,7 @@ class MockDatabase {
         {
           userId: '1',
           projectId: 'project-2',
-          role: 'admin',
+          role: 'prosjektleder',
           permissions: ['read', 'write', 'delete', 'manage_users', 'manage_models', 'generate_lists', 'run_controls'],
           addedAt: '2024-01-05T00:00:00Z',
           addedBy: '1'
@@ -191,7 +233,7 @@ class MockDatabase {
         {
           userId: '1',
           projectId: 'project-3',
-          role: 'admin',
+          role: 'prosjektleder',
           permissions: ['read', 'write', 'delete', 'manage_users', 'manage_models', 'generate_lists', 'run_controls'],
           addedAt: '2024-01-10T00:00:00Z',
           addedBy: '1'
@@ -199,7 +241,7 @@ class MockDatabase {
         {
           userId: '3',
           projectId: 'project-3',
-          role: 'contractor',
+          role: 'bas_byggeledelse',
           permissions: ['read', 'generate_lists'],
           addedAt: '2024-01-11T00:00:00Z',
           addedBy: '1'
@@ -320,14 +362,54 @@ class MockDatabase {
 
   // Project operations
   async getProjects(): Promise<Project[]> {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const { data, error } = await supabase.from("projects").select("*").order("created_at", { ascending: false });
+      if (!error && data) {
+        return data.map((row) => normalizeProject(row));
+      }
+    }
     return [...this.projects];
   }
 
   async getProjectById(id: string): Promise<Project | null> {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const { data, error } = await supabase.from("projects").select("*").eq("id", id).maybeSingle();
+      if (!error && data) return normalizeProject(data);
+    }
     return this.projects.find(project => project.id === id) || null;
   }
 
   async getProjectsForUser(userId: string): Promise<Project[]> {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const [{ data: memberRows, error: memberErr }, { data: createdRows, error: createdErr }] = await Promise.all([
+        supabase
+          .from("project_members")
+          .select("role, permissions, created_at, added_by, project:projects(*)")
+          .eq("user_id", userId),
+        supabase.from("projects").select("*").eq("created_by", userId),
+      ]);
+
+      if (!memberErr || !createdErr) {
+        const byId = new Map<string, Project>();
+        if (memberRows) {
+          memberRows.forEach((row: any) => {
+            if (!row.project) return;
+            byId.set(row.project.id, normalizeProject(row.project, { ...row, user_id: userId }));
+          });
+        }
+        if (createdRows) {
+          createdRows.forEach((row: any) => {
+            if (!byId.has(row.id)) {
+              byId.set(row.id, normalizeProject(row, { user_id: userId, role: "byggherre", permissions: [] }));
+            }
+          });
+        }
+        return Array.from(byId.values());
+      }
+    }
     return this.projects.filter(project => 
       project.teamMembers.some(member => member.userId === userId)
     );
@@ -342,7 +424,7 @@ class MockDatabase {
         {
           userId: projectData.createdBy,
           projectId: `project-${Date.now()}`,
-          role: 'admin',
+          role: 'prosjektleder',
           permissions: ['read', 'write', 'delete', 'manage_users', 'manage_models', 'generate_lists', 'run_controls'],
           addedAt: new Date().toISOString(),
           addedBy: projectData.createdBy
@@ -437,26 +519,18 @@ export const canAccessProject = (user: User, project: Project): boolean => {
 
 export const getRoleDisplayName = (role: UserRole): string => {
   const roleNames: Record<UserRole, string> = {
-    'super_admin': 'Super Administrator',
-    'company_admin': 'Company Administrator',
-    'project_admin': 'Project Administrator',
-    'architect': 'Architect',
-    'engineer': 'Engineer',
-    'contractor': 'Contractor',
-    'supplier': 'Supplier',
-    'client': 'Client'
+    'byggherre': 'Byggherre',
+    'prosjektleder': 'Prosjektleder',
+    'bas_byggeledelse': 'BAS / Byggeledelse',
+    'prosjekterende_ark': 'Prosjekterende (ARK)',
+    'prosjekterende_rib': 'Prosjekterende (RIB)',
+    'prosjekterende_riv': 'Prosjekterende (RIV)',
+    'prosjekterende_rie': 'Prosjekterende (RIE)',
+    'leverandor_logistikk': 'Leverand\u00f8r / Logistikk',
+    'kvalitet_hms': 'Kvalitet / HMS'
   };
   return roleNames[role];
 };
 
-export const getProjectRoleDisplayName = (role: ProjectRole): string => {
-  const roleNames: Record<ProjectRole, string> = {
-    'admin': 'Administrator',
-    'manager': 'Project Manager',
-    'designer': 'Designer',
-    'contractor': 'Contractor',
-    'supplier': 'Supplier',
-    'viewer': 'Viewer'
-  };
-  return roleNames[role];
-};
+export const getProjectRoleDisplayName = (role: ProjectRole): string => getRoleDisplayName(role);
+

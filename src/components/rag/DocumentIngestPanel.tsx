@@ -8,12 +8,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Upload } from "lucide-react";
+import { useSession } from "@/lib/session";
 
 type Props = {
   projectId: string;
 };
 
 export function DocumentIngestPanel({ projectId }: Props) {
+  const { accessToken } = useSession();
   const [title, setTitle] = useState("");
   const [discipline, setDiscipline] = useState("generelt");
   const [reference, setReference] = useState("");
@@ -22,25 +24,33 @@ export function DocumentIngestPanel({ projectId }: Props) {
   const [isUploading, setIsUploading] = useState(false);
 
   const handleFile = async (file: File) => {
-    // Kun tekstfiler inntil vi har PDF-parsing
     if (file.name.toLowerCase().endsWith(".pdf")) {
-      setBanner({ type: "info", text: "PDF-parsing kommer senere. Last opp tekstfil enn så lenge." });
+      setBanner({ type: "info", text: "PDF-parsing kommer senere. Last opp tekstfil enn\u00e5." });
       return;
     }
-    if (!file.type.includes("text") && !file.name.toLowerCase().endsWith(".txt") && !file.name.toLowerCase().endsWith(".md") && !file.name.toLowerCase().endsWith(".csv")) {
-      setBanner({ type: "error", text: "Bare tekstfiler støttes her nå. PDF-parsing kommer senere." });
+    if (
+      !file.type.includes("text") &&
+      !file.name.toLowerCase().endsWith(".txt") &&
+      !file.name.toLowerCase().endsWith(".md") &&
+      !file.name.toLowerCase().endsWith(".csv")
+    ) {
+      setBanner({ type: "error", text: "Bare tekstfiler st\u00f8ttes her n\u00e5. PDF-parsing kommer senere." });
       return;
     }
     const content = await file.text();
     setText(content);
     if (!title) setTitle(file.name.replace(/\.[^/.]+$/, ""));
     if (!reference) setReference(file.name);
-    setBanner({ type: "info", text: "Tekst hentet fra fil. Du kan redigere før lagring." });
+    setBanner({ type: "info", text: "Tekst hentet fra fil. Du kan redigere f\u00f8r lagring." });
   };
 
   const handleSubmit = async () => {
     if (!title.trim() || !reference.trim() || !text.trim()) {
-      setBanner({ type: "error", text: "Tittel, referanse og tekst må fylles ut." });
+      setBanner({ type: "error", text: "Tittel, referanse og tekst m\u00e5 fylles ut." });
+      return;
+    }
+    if (!accessToken) {
+      setBanner({ type: "error", text: "Mangler p\u00e5logging. Logg inn p\u00e5 nytt." });
       return;
     }
     setIsUploading(true);
@@ -48,7 +58,7 @@ export function DocumentIngestPanel({ projectId }: Props) {
     try {
       const res = await fetch("/api/rag/ingest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({
           projectId,
           title: title.trim(),
@@ -94,7 +104,7 @@ export function DocumentIngestPanel({ projectId }: Props) {
             }}
           />
           <p className="text-xs text-muted-foreground">
-            PDF-parsing kommer senere; last opp tekstfiler nå. Prosjekt: {projectId}
+            PDF-parsing kommer senere; last opp tekstfiler n\u00e5. Prosjekt: {projectId}
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -55,7 +55,7 @@ export default function QualityControlDashboard() {
           title: "Insufficient Insulation Thickness",
           description: "Wall insulation thickness does not meet TEK17 requirements for climate zone 3",
           location: "Ground Floor - North Wall",
-          affectedRoles: ["architect", "contractor"],
+          affectedRoles: ["prosjekterende_ark", "bas_byggeledelse"],
           status: "open",
           createdAt: "2024-01-15T10:30:00Z"
         },
@@ -66,7 +66,7 @@ export default function QualityControlDashboard() {
           title: "Window U-Value Compliance",
           description: "Some windows exceed maximum U-value requirements",
           location: "Second Floor - East Facade",
-          affectedRoles: ["architect", "supplier"],
+          affectedRoles: ["prosjekterende_ark", "leverandor_logistikk"],
           status: "in_progress",
           createdAt: "2024-01-15T10:30:00Z"
         }
@@ -88,7 +88,7 @@ export default function QualityControlDashboard() {
           title: "Overlapping Elements",
           description: "Structural beams overlap with HVAC ducts in ceiling space",
           location: "Second Floor - Mechanical Room",
-          affectedRoles: ["structural_engineer", "mep_engineer"],
+          affectedRoles: ["prosjekterende_rib", "prosjekterende_riv"],
           status: "open",
           createdAt: "2024-01-15T11:15:00Z"
         }
@@ -150,12 +150,15 @@ export default function QualityControlDashboard() {
     const highPriorityFindings = findings.filter(f => f.severity === 'high');
     
     const roleNames: Record<string, string> = {
-      architect: "Architect",
-      contractor: "Contractor",
-      structural_engineer: "Structural Engineer",
-      mep_engineer: "MEP Engineer",
-      supplier: "Supplier",
-      project_manager: "Project Manager"
+      byggherre: "Byggherre",
+      prosjektleder: "Prosjektleder",
+      bas_byggeledelse: "BAS / Byggeledelse",
+      prosjekterende_ark: "Prosjekterende (ARK)",
+      prosjekterende_rib: "Prosjekterende (RIB)",
+      prosjekterende_riv: "Prosjekterende (RIV)",
+      prosjekterende_rie: "Prosjekterende (RIE)",
+      leverandor_logistikk: "Leverand\u00f8r / Logistikk",
+      kvalitet_hms: "Kvalitet / HMS"
     };
 
     const meetingProposal = {
@@ -173,7 +176,7 @@ export default function QualityControlDashboard() {
 
     setBanner({
       type: "info",
-      text: `Møteforslag klar: ${meetingProposal.title}. Deltakere: ${meetingProposal.participants.join(
+      text: `M\u00f8teforslag klar: ${meetingProposal.title}. Deltakere: ${meetingProposal.participants.join(
         ", "
       )}. Prioritet: ${meetingProposal.priority}. Varighet: ${meetingProposal.suggestedDuration}.`,
     });
@@ -434,3 +437,5 @@ export default function QualityControlDashboard() {
     </div>
   );
 }
+
+

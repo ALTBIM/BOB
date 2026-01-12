@@ -1,6 +1,8 @@
 -- Supabase schema for BOB (projects, members, files, ifc_models, chat, checks, tasks, kapplister)
 -- Enable UUID generation
 create extension if not exists "pgcrypto";
+-- Enable pgvector
+create extension if not exists "vector";
 
 -- Projects
 create table if not exists public.projects (
@@ -17,7 +19,7 @@ create table if not exists public.project_members (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
   user_id uuid not null,
-  role text not null default 'member',
+  role text not null default 'byggherre',
   company text,
   responsibility_area text,
   permissions text[] default '{}',
@@ -180,6 +182,126 @@ create index if not exists file_requirements_project_idx on public.file_requirem
 create index if not exists file_requirements_file_idx on public.file_requirements(file_id);
 create unique index if not exists file_requirements_unique on public.file_requirements(file_id, text);
 
+-- Documents for RAG ingestion
+create table if not exists public.documents (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  file_id uuid references public.files(id) on delete set null,
+  title text not null,
+  discipline text,
+  reference text,
+  source_path text,
+  source_type text,
+  created_by uuid,
+  created_at timestamptz not null default now()
+);
+create index if not exists documents_project_idx on public.documents(project_id);
+create index if not exists documents_file_idx on public.documents(file_id);
+
+-- Chunked content + embeddings
+create table if not exists public.document_chunks (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  document_id uuid not null references public.documents(id) on delete cascade,
+  chunk_index int not null,
+  content text not null,
+  token_count int,
+  embedding vector(3072),
+  source_page int,
+  source_section text,
+  created_at timestamptz not null default now()
+);
+create index if not exists document_chunks_project_idx on public.document_chunks(project_id);
+create index if not exists document_chunks_document_idx on public.document_chunks(document_id);
+create index if not exists document_chunks_embedding_idx on public.document_chunks using ivfflat (embedding vector_cosine_ops);
+
+-- Sources (for audit and UI)
+create table if not exists public.sources (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  document_id uuid references public.documents(id) on delete cascade,
+  chunk_id uuid references public.document_chunks(id) on delete set null,
+  title text,
+  reference text,
+  discipline text,
+  zone text,
+  snippet text,
+  source_path text,
+  source_page int,
+  created_at timestamptz not null default now()
+);
+create index if not exists sources_project_idx on public.sources(project_id);
+
+-- Chat threads/messages (new structure)
+create table if not exists public.chat_threads (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  title text,
+  created_by uuid,
+  created_at timestamptz not null default now()
+);
+create index if not exists chat_threads_project_idx on public.chat_threads(project_id);
+
+create table if not exists public.chat_messages_v2 (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null references public.chat_threads(id) on delete cascade,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  user_id uuid,
+  role text not null,
+  content text not null,
+  sources jsonb default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists chat_messages_v2_thread_idx on public.chat_messages_v2(thread_id);
+create index if not exists chat_messages_v2_project_idx on public.chat_messages_v2(project_id);
+
+-- Ingest jobs/warnings
+create table if not exists public.ingest_jobs (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  file_id uuid references public.files(id) on delete set null,
+  status text default 'pending',
+  started_at timestamptz,
+  finished_at timestamptz,
+  error text,
+  created_by uuid,
+  created_at timestamptz not null default now()
+);
+create index if not exists ingest_jobs_project_idx on public.ingest_jobs(project_id);
+
+create table if not exists public.ingest_warnings (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  file_id uuid references public.files(id) on delete set null,
+  ingest_job_id uuid references public.ingest_jobs(id) on delete set null,
+  code text,
+  message text,
+  created_at timestamptz not null default now()
+);
+create index if not exists ingest_warnings_project_idx on public.ingest_warnings(project_id);
+
+-- Schedule tasks (from XLSX/CSV)
+create table if not exists public.project_schedule_tasks (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  file_id uuid references public.files(id) on delete set null,
+  task_id text,
+  name text not null,
+  discipline text,
+  owner text,
+  zone text,
+  room text,
+  start_date date,
+  end_date date,
+  duration_days int,
+  status text,
+  dependencies text[],
+  milestone boolean default false,
+  notes text,
+  created_at timestamptz not null default now()
+);
+create index if not exists schedule_tasks_project_idx on public.project_schedule_tasks(project_id);
+
 -- RLS
 alter table public.projects enable row level security;
 alter table public.project_members enable row level security;
@@ -194,6 +316,14 @@ alter table public.kapplister enable row level security;
 alter table public.meeting_suggestions enable row level security;
 alter table public.file_texts enable row level security;
 alter table public.file_requirements enable row level security;
+alter table public.documents enable row level security;
+alter table public.document_chunks enable row level security;
+alter table public.sources enable row level security;
+alter table public.chat_threads enable row level security;
+alter table public.chat_messages_v2 enable row level security;
+alter table public.ingest_jobs enable row level security;
+alter table public.ingest_warnings enable row level security;
+alter table public.project_schedule_tasks enable row level security;
 
 -- Policy helper: project membership
 create or replace view public.user_project_memberships as
@@ -204,15 +334,19 @@ from public.project_members pm;
 create policy "projects_select" on public.projects for select
 using (exists (select 1 from public.project_members pm where pm.project_id = id and pm.user_id = auth.uid()) or auth.uid() = created_by);
 create policy "projects_insert" on public.projects for insert with check (auth.uid() is not null);
-create policy "projects_update" on public.projects for update using (auth.uid() = created_by or exists (select 1 from public.project_members pm where pm.project_id = id and pm.user_id = auth.uid() and pm.role in ('admin','project_manager')));
-create policy "projects_delete" on public.projects for delete using (auth.uid() = created_by);
+create policy "projects_update" on public.projects for update using (auth.uid() = created_by or exists (select 1 from public.project_members pm where pm.project_id = id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
+create policy "projects_delete" on public.projects for delete using (auth.uid() = created_by or exists (select 1 from public.project_members pm where pm.project_id = id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
 
 -- Generic policy template for project-scoped tables
 do $$
 declare
   tbl text;
 begin
-  foreach tbl in array['project_members','files','ifc_models','chats','chat_messages','checks','check_findings','tasks','kapplister','meeting_suggestions','file_texts','file_requirements']
+  foreach tbl in array[
+    'project_members','files','ifc_models','chats','chat_messages','checks','check_findings','tasks','kapplister',
+    'meeting_suggestions','file_texts','file_requirements','documents','document_chunks','sources','chat_threads',
+    'chat_messages_v2','ingest_jobs','ingest_warnings','project_schedule_tasks'
+  ]
   loop
     execute format($f$
       create policy %I_select on public.%I for select
@@ -226,12 +360,12 @@ begin
 
     execute format($f$
       create policy %I_update on public.%I for update
-      using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid() and pm.role in ('admin','project_manager','manager')));
+      using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
     $f$, tbl||'_update', tbl, tbl);
 
     execute format($f$
       create policy %I_delete on public.%I for delete
-      using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid() and pm.role in ('admin','project_manager')));
+      using (exists (select 1 from public.project_members pm where pm.project_id = %I.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
     $f$, tbl||'_delete', tbl, tbl);
   end loop;
 end$$;

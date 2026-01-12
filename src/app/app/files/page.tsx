@@ -8,10 +8,10 @@ import { Loader2, FolderOpen } from "lucide-react";
 import { ProjectFiles } from "@/components/files/ProjectFiles";
 import LoginForm from "@/components/auth/LoginForm";
 import { useSession } from "@/lib/session";
-import { db, Project, User } from "@/lib/database";
+import { db, Project } from "@/lib/database";
 
 export default function FilesPage() {
-  const { user, ready, login } = useSession();
+  const { user, ready } = useSession();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -49,7 +49,7 @@ export default function FilesPage() {
   }, [selectedProject]);
 
   if (!user && ready) {
-    return <LoginForm onLogin={(u: User) => login(u)} />;
+    return <LoginForm />;
   }
 
   return (

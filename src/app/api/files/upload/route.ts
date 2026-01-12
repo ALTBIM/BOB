@@ -1,14 +1,13 @@
-﻿export const runtime = "nodejs";
+export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getAuthUser, requireProjectMembership } from "@/lib/supabase-auth";
+import { ingestScheduleFile, ingestTextDocument } from "@/lib/ingest";
 
-const FILE_BUCKET =
-  process.env.NEXT_PUBLIC_SUPABASE_FILE_BUCKET ||
-  process.env.NEXT_PUBLIC_SUPABASE_IFC_BUCKET ||
-  "ifc-models";
-
+const FILE_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_FILE_BUCKET || "project-files";
 const MAX_SIZE_MB = 500;
+const SIGNED_URL_TTL = 60 * 60;
 const sanitizeFilename = (filename: string) => filename.replace(/[^\w.\-]+/g, "_");
 const splitName = (filename: string) => {
   const lastDot = filename.lastIndexOf(".");
@@ -76,11 +75,6 @@ const extractTextFromFile = async (file: File, category: string): Promise<Extrac
       };
     }
 
-    if (category === "spreadsheet") {
-      // Future: add XLSX/CSV parsing. For now, skip heavy parsing.
-      return null;
-    }
-
     return null;
   } catch (err) {
     console.warn("Kunne ikke ekstrahere tekst", err);
@@ -92,6 +86,11 @@ export async function POST(request: Request) {
   const supabase = getSupabaseServerClient();
   if (!supabase) {
     return NextResponse.json({ error: "Supabase ikke konfigurert" }, { status: 500 });
+  }
+
+  const { user, error: authError } = await getAuthUser(request);
+  if (!user) {
+    return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
   }
 
   const form = await request.formData();
@@ -106,27 +105,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Filen er for stor (maks ${MAX_SIZE_MB} MB)` }, { status: 400 });
   }
 
+  const membership = await requireProjectMembership(supabase, projectId, user.id);
+  if (!membership.ok) {
+    return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
+  }
+
   const ext = file.name.split(".").pop()?.toLowerCase() || "dat";
   const safeName = sanitizeFilename(file.name);
   const nameParts = splitName(safeName);
   let existing: Array<{ id: string; metadata?: Record<string, any> | null }> = [];
   let version = 1;
-  if (supabase) {
-    const { data } = await supabase
-      .from("files")
-      .select("id, metadata")
-      .eq("project_id", projectId)
-      .eq("name", file.name)
-      .eq("type", file.type || "application/octet-stream");
-    if (data) {
-      existing = data as Array<{ id: string; metadata?: Record<string, any> | null }>;
-      const maxVersion = existing.reduce((max, row) => {
-        const v = Number(row.metadata?.version) || 1;
-        return v > max ? v : max;
-      }, 0);
-      version = maxVersion + 1;
-    }
+  const { data: existingRows } = await supabase
+    .from("files")
+    .select("id, metadata")
+    .eq("project_id", projectId)
+    .eq("name", file.name)
+    .eq("type", file.type || "application/octet-stream");
+  if (existingRows) {
+    existing = existingRows as Array<{ id: string; metadata?: Record<string, any> | null }>;
+    const maxVersion = existing.reduce((max, row) => {
+      const v = Number(row.metadata?.version) || 1;
+      return v > max ? v : max;
+    }, 0);
+    version = maxVersion + 1;
   }
+
   const versionSuffix = `__v${version}`;
   const path = `${projectId}/${nameParts.stem}${versionSuffix}${nameParts.ext ? `.${nameParts.ext}` : ""}`;
   const category = detectCategory(file.name, file.type || "");
@@ -143,9 +146,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Opplasting feilet" }, { status: 500 });
   }
 
-  const { data: publicData } = supabase.storage.from(FILE_BUCKET).getPublicUrl(path);
+  const { data: signed } = await supabase.storage.from(FILE_BUCKET).createSignedUrl(path, SIGNED_URL_TTL);
 
-  // Persist metadata
   try {
     const { data: fileRow, error: fileError } = await supabase
       .from("files")
@@ -157,9 +159,9 @@ export async function POST(request: Request) {
           type: file.type || "application/octet-stream",
           size: file.size,
           description,
-          storage_url: publicData.publicUrl,
+          storage_url: null,
           source_provider: "supabase",
-          uploaded_by: "system",
+          uploaded_by: user.id,
           uploaded_at: new Date().toISOString(),
           metadata: {
             category,
@@ -170,6 +172,7 @@ export async function POST(request: Request) {
             version,
             archived: false,
             originalName: file.name,
+            bucket: FILE_BUCKET,
           },
         },
         { onConflict: "path" }
@@ -187,17 +190,17 @@ export async function POST(request: Request) {
         await supabase.from("files").update({ metadata: merged }).eq("id", row.id);
       }
     }
-    if (fileRow?.id && textResult?.text) {
-      const trimmed = textResult.text.slice(0, 200_000);
+    const trimmedText = textResult?.text ? textResult.text.slice(0, 200_000) : "";
+    if (fileRow?.id && trimmedText) {
       try {
         await supabase.from("file_texts").upsert(
           {
             file_id: fileRow.id,
             project_id: projectId,
-            content: trimmed,
+            content: trimmedText,
             content_type: category,
             source_path: path,
-            word_count: textResult.wordCount ?? countWords(trimmed),
+            word_count: textResult.wordCount ?? countWords(trimmedText),
             page_count: textResult.pageCount ?? null,
           },
           { onConflict: "file_id" }
@@ -206,7 +209,7 @@ export async function POST(request: Request) {
         console.warn("Lagring av tekst feilet", err);
       }
 
-      const requirements = extractRequirements(trimmed);
+      const requirements = extractRequirements(trimmedText);
       if (requirements.length) {
         try {
           const payload = requirements.slice(0, 100).map((text) => ({
@@ -220,11 +223,42 @@ export async function POST(request: Request) {
           console.warn("Lagring av krav feilet", err);
         }
       }
+
+      try {
+        await ingestTextDocument({
+          projectId,
+          fileId: fileRow.id,
+          title: file.name,
+          discipline: "generelt",
+          reference: file.name,
+          sourcePath: path,
+          sourceType: category,
+          text: trimmedText,
+          userId: user.id,
+        });
+      } catch (err) {
+        console.warn("Ingest (tekst) feilet", err);
+      }
+    }
+
+    if (fileRow?.id && category === "spreadsheet") {
+      try {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        await ingestScheduleFile({
+          projectId,
+          fileId: fileRow.id,
+          filename: file.name,
+          buffer,
+          userId: user.id,
+        });
+      } catch (err) {
+        console.warn("Ingest (fremdriftsplan) feilet", err);
+      }
     }
 
     return NextResponse.json({
       path,
-      publicUrl: publicData.publicUrl,
+      publicUrl: signed?.signedUrl || null,
       provider: "supabase",
       fileId: fileRow?.id,
       category,
@@ -235,7 +269,7 @@ export async function POST(request: Request) {
     console.warn("Metadata-lagring feilet", err);
     return NextResponse.json({
       path,
-      publicUrl: publicData.publicUrl,
+      publicUrl: signed?.signedUrl || null,
       provider: "supabase",
       category,
       hasText: Boolean(textResult?.text),

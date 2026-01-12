@@ -10,6 +10,7 @@ import { Upload, FileText, Image, FileType, FilePlus, Folder, Download, Eye, Sea
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { listAllFiles, uploadGenericFile } from "@/lib/storage";
+import { useSession } from "@/lib/session";
 
 interface ProjectFilesProps {
   selectedProject: string | null;
@@ -22,7 +23,7 @@ interface FileItem {
   name: string;
   size: number;
   path: string;
-  publicUrl: string;
+  publicUrl: string | null;
   uploadedAt: string;
   provider?: string;
   type?: string;
@@ -54,6 +55,7 @@ const categoryIcons: Record<Category, JSX.Element> = {
 };
 
 export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
+  const { accessToken } = useSession();
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [activeCategory, setActiveCategory] = useState<Category | "all">("all");
@@ -118,6 +120,10 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
 
   const handleDeleteSelected = async () => {
     if (selectedIds.size === 0) return;
+    if (!accessToken) {
+      alert("Mangler p\u00e5logging. Logg inn p\u00e5 nytt.");
+      return;
+    }
     const confirmDelete = window.confirm(
       `Vil du slette ${selectedIds.size} fil(er)? Dette kan ikke angres.`
     );
@@ -133,7 +139,7 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
     try {
       const res = await fetch("/api/files/delete", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -154,9 +160,16 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
       setPreviewText({ loading: false, content: undefined, requirements: [] });
       return;
     }
+    if (!accessToken) {
+      setPreviewText({ loading: false, error: "Mangler p\u00e5logging." });
+      return;
+    }
     setPreviewText({ loading: true, requirements: [] });
     try {
-      const res = await fetch(`/api/files/text?fileId=${encodeURIComponent(file.id)}`, { cache: "no-store" });
+      const res = await fetch(`/api/files/text?fileId=${encodeURIComponent(file.id)}`, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       if (!res.ok) {
         setPreviewText({ loading: false, error: "Kunne ikke hente tekst" });
         return;
@@ -383,11 +396,17 @@ function FileGrid({
               <Eye className="w-4 h-4 mr-1" />
               \u00c5pne
             </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <a href={file.publicUrl} target="_blank" rel="noreferrer">
+            {file.publicUrl ? (
+              <Button variant="ghost" size="sm" asChild>
+                <a href={file.publicUrl} target="_blank" rel="noreferrer">
+                  <Download className="w-4 h-4" />
+                </a>
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" disabled title="Ingen nedlastingslenke tilgjengelig">
                 <Download className="w-4 h-4" />
-              </a>
-            </Button>
+              </Button>
+            )}
           </div>
         </div>
       ))}
@@ -429,6 +448,10 @@ function PreviewBody({
     category === "ifc"
       ? `https://viewer.altbim.no/?url=${encodeURIComponent(file.publicUrl)}`
       : file.publicUrl;
+
+  if (!file.publicUrl) {
+    return <p className="text-sm text-slate-600">Ingen gyldig nedlastingslenke tilgjengelig for filen.</p>;
+  }
 
   useEffect(() => {
     if (file.hasText) {

@@ -41,12 +41,12 @@ export default function UserManagement() {
     email: "",
     company: "",
     phone: "",
-    role: "contractor" as UserRole
+    role: "byggherre" as UserRole
   });
 
   const [newProjectMember, setNewProjectMember] = useState({
     userId: "",
-    role: "viewer" as ProjectRole,
+    role: "byggherre" as ProjectRole,
     permissions: [] as Permission[]
   });
 
@@ -82,7 +82,7 @@ export default function UserManagement() {
         email: "",
         company: "",
         phone: "",
-        role: "contractor"
+        role: "byggherre"
       });
       setIsAddUserOpen(false);
     } catch (error) {
@@ -107,7 +107,7 @@ export default function UserManagement() {
       
       setNewProjectMember({
         userId: "",
-        role: "viewer",
+        role: "byggherre",
         permissions: []
       });
     } catch (error) {
@@ -117,38 +117,45 @@ export default function UserManagement() {
 
   const getDefaultPermissions = (role: ProjectRole): Permission[] => {
     const permissionMap: Record<ProjectRole, Permission[]> = {
-      'admin': ['read', 'write', 'delete', 'manage_users', 'manage_models', 'generate_lists', 'run_controls'],
-      'manager': ['read', 'write', 'manage_models', 'generate_lists', 'run_controls'],
-      'designer': ['read', 'write', 'manage_models', 'generate_lists'],
-      'contractor': ['read', 'generate_lists'],
-      'supplier': ['read'],
-      'viewer': ['read']
+      'byggherre': ['read', 'write', 'delete', 'manage_users', 'manage_models', 'generate_lists', 'run_controls'],
+      'prosjektleder': ['read', 'write', 'delete', 'manage_users', 'manage_models', 'generate_lists', 'run_controls'],
+      'bas_byggeledelse': ['read', 'generate_lists', 'run_controls'],
+      'prosjekterende_ark': ['read', 'write', 'manage_models', 'generate_lists'],
+      'prosjekterende_rib': ['read', 'write', 'manage_models', 'generate_lists'],
+      'prosjekterende_riv': ['read', 'write', 'manage_models', 'generate_lists'],
+      'prosjekterende_rie': ['read', 'write', 'manage_models', 'generate_lists'],
+      'leverandor_logistikk': ['read'],
+      'kvalitet_hms': ['read', 'run_controls']
     };
     return permissionMap[role] || ['read'];
   };
 
   const getRoleBadgeVariant = (role: UserRole) => {
     const variants: Record<UserRole, "default" | "secondary" | "destructive" | "outline"> = {
-      'super_admin': 'destructive',
-      'company_admin': 'destructive',
-      'project_admin': 'default',
-      'architect': 'default',
-      'engineer': 'default',
-      'contractor': 'secondary',
-      'supplier': 'secondary',
-      'client': 'outline'
+      'byggherre': 'default',
+      'prosjektleder': 'default',
+      'bas_byggeledelse': 'secondary',
+      'prosjekterende_ark': 'secondary',
+      'prosjekterende_rib': 'secondary',
+      'prosjekterende_riv': 'secondary',
+      'prosjekterende_rie': 'secondary',
+      'leverandor_logistikk': 'outline',
+      'kvalitet_hms': 'secondary'
     };
     return variants[role] || 'secondary';
   };
 
   const getProjectRoleBadgeVariant = (role: ProjectRole) => {
     const variants: Record<ProjectRole, "default" | "secondary" | "destructive" | "outline"> = {
-      'admin': 'destructive',
-      'manager': 'default',
-      'designer': 'default',
-      'contractor': 'secondary',
-      'supplier': 'secondary',
-      'viewer': 'outline'
+      'byggherre': 'default',
+      'prosjektleder': 'default',
+      'bas_byggeledelse': 'secondary',
+      'prosjekterende_ark': 'secondary',
+      'prosjekterende_rib': 'secondary',
+      'prosjekterende_riv': 'secondary',
+      'prosjekterende_rie': 'secondary',
+      'leverandor_logistikk': 'outline',
+      'kvalitet_hms': 'secondary'
     };
     return variants[role] || 'secondary';
   };
@@ -245,11 +252,15 @@ export default function UserManagement() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="architect">Architect</SelectItem>
-                    <SelectItem value="engineer">Engineer</SelectItem>
-                    <SelectItem value="contractor">Contractor</SelectItem>
-                    <SelectItem value="supplier">Supplier</SelectItem>
-                    <SelectItem value="client">Client</SelectItem>
+                    <SelectItem value="byggherre">Byggherre</SelectItem>
+                    <SelectItem value="prosjektleder">Prosjektleder</SelectItem>
+                    <SelectItem value="bas_byggeledelse">BAS / Byggeledelse</SelectItem>
+                    <SelectItem value="prosjekterende_ark">Prosjekterende (ARK)</SelectItem>
+                    <SelectItem value="prosjekterende_rib">Prosjekterende (RIB)</SelectItem>
+                    <SelectItem value="prosjekterende_riv">Prosjekterende (RIV)</SelectItem>
+                    <SelectItem value="prosjekterende_rie">Prosjekterende (RIE)</SelectItem>
+                    <SelectItem value="leverandor_logistikk">Leverand\u00f8r / Logistikk</SelectItem>
+                    <SelectItem value="kvalitet_hms">Kvalitet / HMS</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -421,12 +432,15 @@ export default function UserManagement() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="admin">Administrator</SelectItem>
-                                <SelectItem value="manager">Project Manager</SelectItem>
-                                <SelectItem value="designer">Designer</SelectItem>
-                                <SelectItem value="contractor">Contractor</SelectItem>
-                                <SelectItem value="supplier">Supplier</SelectItem>
-                                <SelectItem value="viewer">Viewer</SelectItem>
+                                <SelectItem value="byggherre">Byggherre</SelectItem>
+                                <SelectItem value="prosjektleder">Prosjektleder</SelectItem>
+                                <SelectItem value="bas_byggeledelse">BAS / Byggeledelse</SelectItem>
+                                <SelectItem value="prosjekterende_ark">Prosjekterende (ARK)</SelectItem>
+                                <SelectItem value="prosjekterende_rib">Prosjekterende (RIB)</SelectItem>
+                                <SelectItem value="prosjekterende_riv">Prosjekterende (RIV)</SelectItem>
+                                <SelectItem value="prosjekterende_rie">Prosjekterende (RIE)</SelectItem>
+                                <SelectItem value="leverandor_logistikk">Leverand\u00f8r / Logistikk</SelectItem>
+                                <SelectItem value="kvalitet_hms">Kvalitet / HMS</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>

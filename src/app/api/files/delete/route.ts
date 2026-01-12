@@ -2,11 +2,11 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getAuthUser, requireProjectMembership } from "@/lib/supabase-auth";
 
 const FILE_BUCKET =
   process.env.NEXT_PUBLIC_SUPABASE_FILE_BUCKET ||
-  process.env.NEXT_PUBLIC_SUPABASE_IFC_BUCKET ||
-  "ifc-models";
+  "project-files";
 
 export async function POST(request: Request) {
   const supabase = getSupabaseServerClient();
@@ -21,6 +21,19 @@ export async function POST(request: Request) {
 
   if (fileIds.length === 0 && paths.length === 0) {
     return NextResponse.json({ error: "Ingen filer valgt" }, { status: 400 });
+  }
+  if (!projectId) {
+    return NextResponse.json({ error: "Mangler projectId" }, { status: 400 });
+  }
+
+  const { user, error: authError } = await getAuthUser(request);
+  if (!user) {
+    return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+  }
+
+  const membership = await requireProjectMembership(supabase, projectId, user.id);
+  if (!membership.ok) {
+    return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
   }
 
   const deletePaths = new Set<string>();

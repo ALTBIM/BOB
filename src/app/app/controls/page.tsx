@@ -7,12 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Building2 } from "lucide-react";
 import LoginForm from "@/components/auth/LoginForm";
 import { useSession } from "@/lib/session";
-import { db, Project, User } from "@/lib/database";
+import { db, Project } from "@/lib/database";
 import QualityControlDashboard from "@/components/controls/QualityControlDashboard";
 import { DocumentIngestPanel } from "@/components/rag/DocumentIngestPanel";
 
 export default function ControlsPage() {
-  const { user, ready, login } = useSession();
+  const { user, ready } = useSession();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -50,7 +50,7 @@ export default function ControlsPage() {
   }, [selectedProject]);
 
   if (!user && ready) {
-    return <LoginForm onLogin={(u: User) => login(u)} />;
+    return <LoginForm />;
   }
 
   return (

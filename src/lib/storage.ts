@@ -1,14 +1,28 @@
 import { createClient } from "@supabase/supabase-js";
+import { getSupabaseBrowserClient } from "@/lib/supabase-client";
 
 const PUBLIC_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const PUBLIC_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const IFC_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_IFC_BUCKET || "ifc-models";
-const FILE_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_FILE_BUCKET || IFC_BUCKET;
+const FILE_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_FILE_BUCKET || "project-files";
 
 const client =
   typeof window !== "undefined" && PUBLIC_URL && PUBLIC_KEY
     ? createClient(PUBLIC_URL, PUBLIC_KEY)
     : null;
+
+const getAccessToken = async () => {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+};
+
+const withAuthHeaders = async (headers: Record<string, string> = {}) => {
+  const token = await getAccessToken();
+  if (!token) return headers;
+  return { ...headers, Authorization: `Bearer ${token}` };
+};
 
 // Client-side: prefer server API (uses service credentials or Vercel Blob token). Fall back to anon Supabase if configured.
 export const uploadIfcFile = async (file: File, projectId: string) => {
@@ -17,7 +31,12 @@ export const uploadIfcFile = async (file: File, projectId: string) => {
       const form = new FormData();
       form.append("file", file);
       form.append("projectId", projectId);
-      const res = await fetch("/api/ifc/upload", { method: "POST", body: form, cache: "no-store" });
+      const res = await fetch("/api/ifc/upload", {
+        method: "POST",
+        body: form,
+        cache: "no-store",
+        headers: await withAuthHeaders(),
+      });
       if (!res.ok) {
         const text = await res.text();
         console.warn("API upload feilet", res.status, text);
@@ -63,7 +82,7 @@ export const listIfcFiles = async (projectId: string, includeArchived = false) =
     const url = projectId
       ? `/api/ifc/list?projectId=${encodeURIComponent(projectId)}&includeArchived=${includeArchived ? "1" : "0"}`
       : `/api/ifc/list?includeArchived=${includeArchived ? "1" : "0"}`;
-    const res = await fetch(url, { method: "GET", cache: "no-store" });
+      const res = await fetch(url, { method: "GET", cache: "no-store", headers: await withAuthHeaders() });
     if (res.ok) {
       const data = await res.json();
       return (data.files || []).map((item: any) => ({
@@ -117,7 +136,12 @@ export const uploadGenericFile = async (file: File, projectId: string, descripti
       form.append("file", file);
       form.append("projectId", projectId);
       if (description) form.append("description", description);
-      const res = await fetch("/api/files/upload", { method: "POST", body: form, cache: "no-store" });
+      const res = await fetch("/api/files/upload", {
+        method: "POST",
+        body: form,
+        cache: "no-store",
+        headers: await withAuthHeaders(),
+      });
       if (!res.ok) {
         const text = await res.text();
         console.warn("API generic upload feilet", res.status, text);
@@ -163,7 +187,7 @@ export const listAllFiles = async (projectId: string, includeArchived = false) =
     const url = projectId
       ? `/api/files/list?projectId=${encodeURIComponent(projectId)}&includeArchived=${includeArchived ? "1" : "0"}`
       : `/api/files/list?includeArchived=${includeArchived ? "1" : "0"}`;
-    const res = await fetch(url, { method: "GET", cache: "no-store" });
+      const res = await fetch(url, { method: "GET", cache: "no-store", headers: await withAuthHeaders() });
     if (res.ok) {
       const data = await res.json();
       return (data.files || []).map((item: any) => ({

@@ -1,16 +1,4 @@
-import { promises as fs } from "fs";
-import path from "path";
-import { Pool } from "pg";
-
-export type SourceDocument = {
-  id: string;
-  projectId: string;
-  title: string;
-  discipline: string;
-  zone?: string;
-  reference: string;
-  text: string;
-};
+﻿import { getPgPool } from "@/lib/pg";
 
 export type RetrievedSource = {
   id: string;
@@ -21,6 +9,7 @@ export type RetrievedSource = {
   zone?: string;
   snippet: string;
   score: number;
+  sourcePath?: string;
 };
 
 type RetrieveOptions = {
@@ -28,211 +17,134 @@ type RetrieveOptions = {
   includeGeneralFallback?: boolean;
 };
 
-const dataDir = path.join(process.cwd(), "data");
-const docsFile = path.join(dataDir, "rag-docs.json");
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const OPENAI_EMBED_MODEL = process.env.OPENAI_EMBED_MODEL || "text-embedding-3-large";
 
-let cachedDocs: SourceDocument[] | null = null;
-let dbPool: Pool | null = null;
-let dbReady = false;
-let lastBackend: "db" | "file" = "file";
+const toSqlVector = (embedding: number[]) => `[${embedding.join(",")}]`;
 
-async function ensureDocsFile() {
-  try {
-    await fs.mkdir(dataDir, { recursive: true });
-    await fs.access(docsFile);
-  } catch {
-    await fs.writeFile(docsFile, "[]", "utf-8");
-  }
-}
-
-async function getDb(): Promise<Pool | null> {
-  if (dbReady && dbPool) return dbPool;
-  const url = process.env.DATABASE_URL;
-  if (!url) return null;
-  try {
-    dbPool = new Pool({ connectionString: url });
-    await dbPool.query("SELECT 1");
-    await dbPool.query(`
-      CREATE TABLE IF NOT EXISTS rag_documents (
-        id TEXT PRIMARY KEY,
-        project_id TEXT NOT NULL,
-        title TEXT NOT NULL,
-        discipline TEXT NOT NULL,
-        zone TEXT,
-        reference TEXT NOT NULL,
-        text TEXT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT now()
-      );
-    `);
-    dbReady = true;
-    lastBackend = "db";
-    return dbPool;
-  } catch (err) {
-    console.error("Kunne ikke koble til DATABASE_URL, bruker fil-lagring", err);
-    dbPool = null;
-    lastBackend = "file";
-    return null;
-  }
-}
-
-async function loadDocs(): Promise<SourceDocument[]> {
-  const db = await getDb();
-  if (db) {
-    try {
-      const res = await db.query<{
-        id: string;
-        project_id: string;
-        title: string;
-        discipline: string;
-        zone: string | null;
-        reference: string;
-        text: string;
-      }>("SELECT id, project_id, title, discipline, zone, reference, text FROM rag_documents");
-      return res.rows.map((r) => ({
-        id: r.id,
-        projectId: r.project_id,
-        title: r.title,
-        discipline: r.discipline,
-        zone: r.zone || undefined,
-        reference: r.reference,
-        text: r.text,
-      }));
-    } catch (err) {
-      console.error("Kunne ikke lese RAG-dokumenter fra DB, faller tilbake til fil", err);
-      lastBackend = "file";
-    }
-  }
-
-  if (cachedDocs) return cachedDocs;
-  await ensureDocsFile();
-  try {
-    const raw = await fs.readFile(docsFile, "utf-8");
-    const parsed = JSON.parse(raw) as SourceDocument[];
-    cachedDocs = parsed;
-    return parsed;
-  } catch (err) {
-    console.error("Kunne ikke lese RAG-dokumenter fra fil", err);
-    return [];
-  }
-}
-
-async function persistDocs(docs: SourceDocument[]) {
-  const db = await getDb();
-  if (db) {
-    const client = await db.connect();
-    try {
-      await client.query("BEGIN");
-      for (const doc of docs) {
-        await client.query(
-          `
-            INSERT INTO rag_documents (id, project_id, title, discipline, zone, reference, text)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (id) DO UPDATE SET
-              project_id = excluded.project_id,
-              title = excluded.title,
-              discipline = excluded.discipline,
-              zone = excluded.zone,
-              reference = excluded.reference,
-              text = excluded.text;
-          `,
-          [doc.id, doc.projectId, doc.title, doc.discipline, doc.zone || null, doc.reference, doc.text]
-        );
-      }
-      await client.query("COMMIT");
-      return;
-    } catch (err) {
-      await client.query("ROLLBACK");
-      console.error("Kunne ikke lagre RAG-dokumenter til DB, faller tilbake til fil", err);
-    } finally {
-      client.release();
-    }
-  }
-
-  cachedDocs = docs;
-  await ensureDocsFile();
-  await fs.writeFile(docsFile, JSON.stringify(docs, null, 2), "utf-8");
-}
-
-export async function upsertDocument(doc: SourceDocument) {
-  const docs = await loadDocs();
-  const existingIndex = docs.findIndex((d) => d.id === doc.id);
-  if (existingIndex >= 0) {
-    docs[existingIndex] = doc;
-  } else {
-    docs.push(doc);
-  }
-  await persistDocs(docs);
-}
-
-export async function listDocuments(projectId?: string) {
-  const docs = await loadDocs();
-  return projectId ? docs.filter((d) => d.projectId === projectId) : docs;
-}
-
-function scoreText(text: string, query: string): number {
-  const haystack = text.toLowerCase();
-  const tokens = query.toLowerCase().split(/[^a-z0-9æøå]+/i).filter(Boolean);
-  if (!tokens.length) return 0;
-
-  let score = 0;
-  tokens.forEach((token) => {
-    if (haystack.includes(token)) {
-      score += 2;
-    }
+async function embedQuery(query: string) {
+  if (!OPENAI_API_KEY) return null;
+  const response = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_EMBED_MODEL,
+      input: query,
+    }),
   });
-
-  // Favor shorter, focused texts
-  score += Math.max(0, 3 - Math.floor(text.length / 200));
-
-  return score;
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Embedding feilet: ${response.status} ${text}`);
+  }
+  const json = await response.json();
+  const embedding = json?.data?.[0]?.embedding as number[] | undefined;
+  return embedding || null;
 }
 
-function trimSnippet(text: string, maxLength = 220): string {
+const trimSnippet = (text: string, maxLength = 220): string => {
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 3)}...`;
-}
+};
 
 export async function retrieveContext(
   projectId: string,
   query: string,
   options: RetrieveOptions = {}
 ): Promise<{ sources: RetrievedSource[]; contextText: string }> {
-  const limit = options.limit ?? 4;
-  const docs = await loadDocs();
-  const projectPool = docs.filter((doc) => doc.projectId === projectId);
-  const generalPool = docs.filter((doc) => doc.projectId === "general");
+  const limit = options.limit ?? 6;
+  if (!projectId) {
+    return { sources: [], contextText: "Ingen prosjekt er valgt." };
+  }
+  if (!query.trim()) {
+    return { sources: [], contextText: "Ingen sp\u00f8rsm\u00e5l oppgitt." };
+  }
 
-  const pool = projectPool.length
-    ? projectPool
-    : options.includeGeneralFallback
-    ? generalPool
-    : [];
+  let embedding: number[] | null = null;
+  try {
+    embedding = await embedQuery(query);
+  } catch (err) {
+    console.warn("Embedding feilet", err);
+  }
+  if (!embedding) {
+    return { sources: [], contextText: "Ingen prosjektkilder funnet." };
+  }
 
-  const scored = pool
-    .map((doc) => ({
-      doc,
-      score: scoreText(`${doc.title} ${doc.text}`, query),
-    }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+  const pool = await getPgPool();
+  const vector = toSqlVector(embedding);
+  const { rows } = await pool.query(
+    `
+      SELECT
+        c.id,
+        c.content,
+        c.project_id,
+        d.title,
+        d.reference,
+        d.discipline,
+        d.source_path,
+        (1 - (c.embedding <=> $1::vector)) AS score
+      FROM document_chunks c
+      JOIN documents d ON d.id = c.document_id
+      WHERE c.project_id = $2
+      ORDER BY c.embedding <=> $1::vector
+      LIMIT $3
+    `,
+    [vector, projectId, limit]
+  );
 
-  const sources: RetrievedSource[] = scored.map(({ doc, score }) => ({
-    id: doc.id,
-    projectId: doc.projectId,
-    title: doc.title,
-    reference: doc.reference,
-    discipline: doc.discipline,
-    zone: doc.zone,
-    snippet: trimSnippet(doc.text),
-    score,
+  const sources: RetrievedSource[] = rows.map((row: any) => ({
+    id: row.id,
+    projectId: row.project_id,
+    title: row.title || "Ukjent kilde",
+    reference: row.reference || row.source_path || "Ukjent referanse",
+    discipline: row.discipline || "generelt",
+    snippet: trimSnippet(row.content || ""),
+    score: Number(row.score ?? 0),
+    sourcePath: row.source_path || undefined,
   }));
+
+  const { rows: scheduleRows } = await pool.query(
+    `
+      SELECT task_id, name, discipline, zone, room, start_date, end_date, status, notes
+      FROM project_schedule_tasks
+      WHERE project_id = $1
+      ORDER BY start_date NULLS LAST
+      LIMIT 12
+    `,
+    [projectId]
+  );
+
+  const scheduleSnippet = scheduleRows
+    .map((row: any) => {
+      const start = row.start_date ? new Date(row.start_date).toISOString().slice(0, 10) : "";
+      const end = row.end_date ? new Date(row.end_date).toISOString().slice(0, 10) : "";
+      const window = start && end ? `${start} - ${end}` : start || end || "";
+      const zone = row.zone || row.room ? ` (${[row.zone, row.room].filter(Boolean).join(" / ")})` : "";
+      const status = row.status ? ` [${row.status}]` : "";
+      return `- ${row.name}${zone}${status} ${window}`.trim();
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  if (scheduleSnippet) {
+    sources.push({
+      id: "schedule",
+      projectId,
+      title: "Fremdriftsplan",
+      reference: "project_schedule_tasks",
+      discipline: "fremdrift",
+      snippet: trimSnippet(scheduleSnippet, 240),
+      score: 0.5,
+    });
+  }
 
   const contextText = sources.length
     ? sources
         .map(
           (source, index) =>
-            `[Kilde ${index + 1}] ${source.title} (${source.reference}) — ${source.snippet}`
+            `[Kilde ${index + 1}] ${source.title} (${source.reference}) \u2014 ${source.snippet}`
         )
         .join("\n")
     : "Ingen prosjektkilder funnet.";
@@ -240,13 +152,22 @@ export async function retrieveContext(
   return { sources, contextText };
 }
 
+export async function listDocuments(projectId: string) {
+  const pool = await getPgPool();
+  const { rows } = await pool.query(
+    `SELECT id, project_id, title, reference, discipline, source_path FROM documents WHERE project_id = $1`,
+    [projectId]
+  );
+  return rows;
+}
+
 export async function getRagStatus() {
-  const docs = await loadDocs();
-  const backend = lastBackend;
-  const count = docs.length;
+  const pool = await getPgPool();
+  const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM documents");
   return {
-    backend,
-    docCount: count,
-    dbReady: backend === "db",
+    backend: "db",
+    dbReady: true,
+    docCount: rows?.[0]?.count ?? 0,
   };
 }
+

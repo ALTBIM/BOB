@@ -1,20 +1,30 @@
 import { NextResponse } from "next/server";
 import { logInteraction } from "@/lib/logger";
 import { retrieveContext, RetrievedSource } from "@/lib/rag";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getAuthUser, requireProjectMembership } from "@/lib/supabase-auth";
 
-// Node runtime for SSE-streaming
 export const runtime = "nodejs";
 
-const systemPrompt = `
-Du er BOB, en faglig, prosjekt-isolert assistent for bygg/BIM.
-- Bruk kun gitt kontekst og prosjektkilder. Ingen kryss-prosjekt deling.
-- Struktur (alltid): 1) Konklusjon 2) Basis / Kilder 3) Anbefalinger 4) Forutsetninger & antakelser.
-- Vær faktabasert og presis. Ingen gjetting eller tall uten kilde. Marker tydelig hvis data mangler.
-- Hvis ingen kilder finnes, si eksplisitt at kilder mangler og foreslå hvilke dokumenter/IFC/standarder som trengs.
-- Rolle-tilpasning: tilpass vinkling etter brukerrolle, men hold nøkternt og profesjonelt.
-- Tone: Kort, profesjonell, nøytral. Ikke småprat.`;
+const SYSTEM_PROMPT = [
+  "Du er BOB, en faglig, prosjekt-isolert assistent for bygg/BIM.",
+  "- Bruk kun gitt kontekst og prosjektkilder. Ingen kryss-prosjekt deling.",
+  "- Struktur (alltid): 1) Konklusjon 2) Basis / Kilder 3) Anbefalinger 4) Forutsetninger & antakelser.",
+  "- V\u00e6r faktabasert og presis. Ingen gjetting eller tall uten kilde.",
+  "- Hvis ingen kilder finnes, si eksplisitt at kilder mangler og foresl\u00e5 hvilke dokumenter/IFC/standarder som trengs.",
+  "- Rolle-tilpasning: tilpass vinkling etter brukerrolle, men hold n\u00f8kternt og profesjonelt.",
+  "- Tone: Kort, profesjonell, n\u00f8ytral. Ikke sm\u00e5prat.",
+].join("\n");
 
 type ChatMemory = { id: string; text: string };
+
+type ChatBody = {
+  message: string;
+  projectId: string;
+  style?: "kort" | "detaljert";
+  sources?: boolean;
+  memory?: ChatMemory[];
+};
 
 function buildUserPrompt(params: {
   message: string;
@@ -26,24 +36,66 @@ function buildUserPrompt(params: {
   contextText: string;
 }) {
   const { message, projectId, role, style, withSources, memory, contextText } = params;
-
   const memoryText = memory?.length ? memory.map((m) => `- ${m.text}`).join("\n") : "Ingen ekstra prosjektkontekst oppgitt.";
   const styleText = style === "detaljert" ? "Detaljert, men konsis." : "Kortfattet.";
-  const sourceText = withSources ? "Ta med kilde-IDer i del 2." : "Hvis kilder finnes, referer kort uten å liste alt.";
+  const sourceText = withSources ? "Ta med kilde-IDer i del 2." : "Hvis kilder finnes, referer kort uten \u00e5 liste alt.";
 
-  return `
-Prosjekt-ID: ${projectId}
-Brukerrolle: ${role || "ukjent"}
-Svarstil: ${styleText}
-Kildepolicy: ${sourceText}
-Tilgjengelige kilder/utdrag:
-${contextText}
-Prosjektminne:
-${memoryText}
-Brukerspørsmål:
-${message}
+  return [
+    `Prosjekt-ID: ${projectId}`,
+    `Brukerrolle: ${role || "ukjent"}`,
+    `Svarstil: ${styleText}`,
+    `Kildepolicy: ${sourceText}`,
+    "Tilgjengelige kilder/utdrag:",
+    contextText,
+    "Prosjektminne:",
+    memoryText,
+    "Brukersp\u00f8rsm\u00e5l:",
+    message,
+    "",
+    "Gi svaret med fire overskrifter som beskrevet i systemprompten.",
+  ].join("\n");
+}
 
-Gi svaret med fire overskrifter som beskrevet i systemprompten.`;
+async function ensureThread(supabase: ReturnType<typeof getSupabaseServerClient>, projectId: string, userId: string) {
+  if (!supabase) return null;
+  const { data: existing } = await supabase
+    .from("chat_threads")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("created_by", userId)
+    .maybeSingle();
+  if (existing?.id) return existing.id as string;
+
+  const { data: created } = await supabase
+    .from("chat_threads")
+    .insert({ project_id: projectId, created_by: userId, title: "BOB Chat" })
+    .select("id")
+    .single();
+  return created?.id || null;
+}
+
+async function logToDb(
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  threadId: string | null,
+  projectId: string,
+  userId: string,
+  role: "user" | "assistant",
+  content: string,
+  sources: RetrievedSource[] = []
+) {
+  if (!supabase || !threadId) return;
+  try {
+    await supabase.from("chat_messages_v2").insert({
+      thread_id: threadId,
+      project_id: projectId,
+      user_id: userId,
+      role,
+      content,
+      sources: sources.length ? sources : [],
+    });
+  } catch (err) {
+    console.warn("Kunne ikke logge chat-melding", err);
+  }
 }
 
 function streamSyntheticAnswer(
@@ -81,14 +133,12 @@ function streamSyntheticAnswer(
 }
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({}));
-  const message: string = body?.message ?? "";
-  const projectId: string = body?.projectId ?? "";
-  const style: string = body?.style ?? "kort";
-  const withSources: boolean = Boolean(body?.sources ?? true);
-  const memory: ChatMemory[] = body?.memory ?? [];
-  const role: string = body?.role ?? "ukjent";
-  const userId: string = body?.userId ?? "anonymous";
+  const body = (await request.json().catch(() => ({}))) as Partial<ChatBody>;
+  const message = body?.message ?? "";
+  const projectId = body?.projectId ?? "";
+  const style = body?.style ?? "kort";
+  const withSources = Boolean(body?.sources ?? true);
+  const memory = body?.memory ?? [];
 
   if (!message.trim()) {
     return NextResponse.json({ error: "Melding mangler." }, { status: 400 });
@@ -98,8 +148,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Prosjekt-ID mangler." }, { status: 400 });
   }
 
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json({ error: "Supabase ikke konfigurert." }, { status: 500 });
+  }
+
+  const { user, error: authError } = await getAuthUser(request);
+  if (!user) {
+    return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+  }
+
+  const membership = await requireProjectMembership(supabase, projectId, user.id);
+  if (!membership.ok) {
+    return NextResponse.json({ error: membership.error || "Ingen tilgang." }, { status: 403 });
+  }
+
+  const role = membership.membership?.role || "byggherre";
+  const threadId = await ensureThread(supabase, projectId, user.id);
+  await logToDb(supabase, threadId, projectId, user.id, "user", message);
+
   const { sources: retrievedSources, contextText } = await retrieveContext(projectId, message, {
-    includeGeneralFallback: true,
+    includeGeneralFallback: false,
   });
 
   const userPrompt = buildUserPrompt({
@@ -113,28 +182,29 @@ export async function POST(request: Request) {
   });
 
   const apiKey = process.env.OPENAI_API_KEY;
+  const chatModel = process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini";
 
-  // Fallback når API-nøkkel mangler
   if (!apiKey) {
     const synthetic = [
-      "Konklusjon: Kan ikke kontakte modellen (mangler OPENAI_API_KEY). Viser foreløpig vurdering basert på lokale kilder.",
+      "Konklusjon: Kan ikke kontakte modellen (mangler OPENAI_API_KEY). Viser forel\u00f8pig vurdering basert p\u00e5 lokale kilder.",
       `Basis / Kilder: ${
         retrievedSources.length
           ? retrievedSources.map((s, i) => `[Kilde ${i + 1}] ${s.title} (${s.reference})`).join("; ")
           : "Ingen kilder funnet i prosjektet."
       }`,
-      "Anbefalinger: Oppgi API-nøkkel eller legg til prosjektkilder (IFC/PDF/krav) for RAG-svar.",
+      "Anbefalinger: Oppgi API-n\u00f8kkel eller legg til prosjektkilder (IFC/PDF/krav) for RAG-svar.",
       "Forutsetninger & antakelser: Ingen modellrespons. Kun statisk regelverk/brukerinput lest.",
     ].join("\n");
 
-    return streamSyntheticAnswer(synthetic, { projectId, prompt: message, role, sources: retrievedSources, userId });
+    await logToDb(supabase, threadId, projectId, user.id, "assistant", synthetic, retrievedSources);
+    return streamSyntheticAnswer(synthetic, { projectId, prompt: message, role, sources: retrievedSources, userId: user.id });
   }
 
   const openAiPayload = {
-    model: "gpt-4o-mini",
+    model: chatModel,
     stream: true,
     messages: [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userPrompt },
     ],
   };
@@ -151,16 +221,17 @@ export async function POST(request: Request) {
     });
   } catch (err: any) {
     const synthetic = [
-      "Konklusjon: Klarte ikke å nå OpenAI-endepunktet.",
+      "Konklusjon: Klarte ikke \u00e5 n\u00e5 OpenAI-endepunktet.",
       `Basis / Kilder: ${
         retrievedSources.length
           ? retrievedSources.map((s, i) => `[Kilde ${i + 1}] ${s.title} (${s.reference})`).join("; ")
           : "Ingen kilder funnet i prosjektet."
       }`,
-      `Anbefalinger: Sjekk nettverk og API-nøkkel. Feil: ${err?.message ?? "ukjent"}`,
+      `Anbefalinger: Sjekk nettverk og API-n\u00f8kkel. Feil: ${err?.message ?? "ukjent"}`,
       "Forutsetninger & antakelser: Ingen modellrespons.",
     ].join("\n");
-    return streamSyntheticAnswer(synthetic, { projectId, prompt: message, role, sources: retrievedSources, userId });
+    await logToDb(supabase, threadId, projectId, user.id, "assistant", synthetic, retrievedSources);
+    return streamSyntheticAnswer(synthetic, { projectId, prompt: message, role, sources: retrievedSources, userId: user.id });
   }
 
   if (!response.ok || !response.body) {
@@ -172,10 +243,11 @@ export async function POST(request: Request) {
           ? retrievedSources.map((s, i) => `[Kilde ${i + 1}] ${s.title} (${s.reference})`).join("; ")
           : "Ingen kilder funnet i prosjektet."
       }`,
-      `Anbefalinger: Sjekk API-nøkkel/kvote. Respons: ${text || "ingen detaljer."}`,
+      `Anbefalinger: Sjekk API-n\u00f8kkel/kvote. Respons: ${text || "ingen detaljer."}`,
       "Forutsetninger & antakelser: Ingen modellrespons.",
     ].join("\n");
-    return streamSyntheticAnswer(synthetic, { projectId, prompt: message, role, sources: retrievedSources, userId });
+    await logToDb(supabase, threadId, projectId, user.id, "assistant", synthetic, retrievedSources);
+    return streamSyntheticAnswer(synthetic, { projectId, prompt: message, role, sources: retrievedSources, userId: user.id });
   }
 
   const encoder = new TextEncoder();
@@ -184,7 +256,6 @@ export async function POST(request: Request) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      // send kildemetadata først slik klient kan vise dem uavhengig av modellrespons
       try {
         controller.enqueue(encoder.encode(`data: SOURCES::${JSON.stringify(retrievedSources)}\n\n`));
       } catch {
@@ -214,9 +285,10 @@ export async function POST(request: Request) {
         console.error("Stream error:", err);
       } finally {
         controller.close();
+        await logToDb(supabase, threadId, projectId, user.id, "assistant", fullAnswer || "", retrievedSources);
         logInteraction({
           projectId,
-          userId,
+          userId: user.id,
           role,
           prompt: message,
           retrievedSources,
