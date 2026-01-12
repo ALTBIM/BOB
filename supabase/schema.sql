@@ -346,7 +346,7 @@ do $$
 declare
   tbl text;
 begin
-  foreach tbl in array[
+  foreach tbl in ARRAY[
     'project_members','files','ifc_models','chats','chat_messages','checks','check_findings','tasks','kapplister',
     'meeting_suggestions','file_texts','file_requirements','documents','document_chunks','sources','chat_threads',
     'chat_messages_v2','ingest_jobs','ingest_warnings','project_schedule_tasks'
