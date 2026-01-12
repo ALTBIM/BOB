@@ -39,6 +39,7 @@ create table if not exists public.projects (
   location text,
   type text default 'commercial',
   progress int default 0,
+  org_id uuid references public.organizations(id) on delete set null,
   created_by uuid,
   created_at timestamptz not null default now()
 );
@@ -890,6 +891,5 @@ create policy "project_schedule_tasks_update" on public.project_schedule_tasks f
 using (public.can_project_write(auth.uid(), project_schedule_tasks.project_id));
 create policy "project_schedule_tasks_delete" on public.project_schedule_tasks for delete
 using (public.can_project_write(auth.uid(), project_schedule_tasks.project_id));
-
 
 

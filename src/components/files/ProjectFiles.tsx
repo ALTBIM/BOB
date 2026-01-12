@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Upload, FileText, Image, FileType, FilePlus, Folder, Download, Eye, Search, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -345,7 +345,9 @@ export function ProjectFiles({ selectedProject }: ProjectFilesProps) {
         <DialogContent className="max-w-5xl">
           <DialogHeader>
             <DialogTitle>{previewFile?.name}</DialogTitle>
-            <p className="text-sm text-slate-500 break-all">{previewFile?.publicUrl}</p>
+            <DialogDescription className="break-all text-sm text-slate-500">
+              {previewFile?.publicUrl}
+            </DialogDescription>
           </DialogHeader>
           {previewFile ? (
             <PreviewBody file={previewFile} previewText={previewText} onLoadText={loadTextForFile} />

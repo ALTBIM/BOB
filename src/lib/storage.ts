@@ -1,4 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase-client";
 
 const PUBLIC_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -6,10 +5,13 @@ const PUBLIC_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const IFC_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_IFC_BUCKET || "ifc-models";
 const FILE_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_FILE_BUCKET || "project-files";
 
-const client =
-  typeof window !== "undefined" && PUBLIC_URL && PUBLIC_KEY
-    ? createClient(PUBLIC_URL, PUBLIC_KEY)
-    : null;
+const getAnonClient = () => {
+  const supabase = getSupabaseBrowserClient();
+  if (supabase) return supabase;
+  if (typeof window === "undefined") return null;
+  if (!PUBLIC_URL || !PUBLIC_KEY) return null;
+  return getSupabaseBrowserClient();
+};
 
 const getAccessToken = async () => {
   const supabase = getSupabaseBrowserClient();
@@ -56,6 +58,7 @@ export const uploadIfcFile = async (file: File, projectId: string) => {
     }
   }
 
+  const client = getAnonClient();
   if (!client) {
     console.warn("Ingen lagring konfigurert (hverken API eller Supabase anon).");
     return null;
@@ -103,6 +106,7 @@ export const listIfcFiles = async (projectId: string, includeArchived = false) =
   }
 
   // Fallback: anon Supabase if available
+  const client = getAnonClient();
   if (!client) return [];
   const path = projectId ? `${projectId}` : "";
   const { data, error } = await client.storage.from(IFC_BUCKET).list(path, {
@@ -162,6 +166,7 @@ export const uploadGenericFile = async (file: File, projectId: string, descripti
     }
   }
 
+  const client = getAnonClient();
   if (!client) {
     console.warn("Ingen lagring konfigurert (hverken API eller Supabase anon).");
     return null;
@@ -212,6 +217,7 @@ export const listAllFiles = async (projectId: string, includeArchived = false) =
     console.warn("Kunne ikke hente filer via API", err);
   }
 
+  const client = getAnonClient();
   if (!client) return [];
   const path = projectId ? `${projectId}` : "";
   const { data, error } = await client.storage.from(FILE_BUCKET).list(path, { limit: 100 });
