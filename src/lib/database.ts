@@ -387,7 +387,7 @@ class MockDatabase {
       const [{ data: memberRows, error: memberErr }, { data: createdRows, error: createdErr }] = await Promise.all([
         supabase
           .from("project_members")
-          .select("role, permissions, created_at, added_by, project:projects(*)")
+          .select("role, permissions, created_at, project:projects(*)")
           .eq("user_id", userId),
         supabase.from("projects").select("*").eq("created_by", userId),
       ]);
@@ -416,6 +416,47 @@ class MockDatabase {
   }
 
   async createProject(projectData: Omit<Project, 'id' | 'createdAt' | 'teamMembers'>): Promise<Project> {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const payload = {
+        name: projectData.name,
+        description: projectData.description || null,
+        status: projectData.status,
+        client: projectData.client || null,
+        location: projectData.location || null,
+        type: projectData.type,
+        progress: projectData.progress ?? 0,
+        created_by: projectData.createdBy,
+      };
+      const { data, error } = await supabase.from("projects").insert(payload).select("*").single();
+      if (error) {
+        throw error;
+      }
+      if (data) {
+        const permissions: Permission[] = [
+          'read',
+          'write',
+          'delete',
+          'manage_users',
+          'manage_models',
+          'generate_lists',
+          'run_controls'
+        ];
+        const memberRow = {
+          project_id: data.id,
+          user_id: projectData.createdBy,
+          role: 'prosjektleder' as ProjectRole,
+          permissions,
+          created_at: new Date().toISOString()
+        };
+        const { error: memberErr } = await supabase.from("project_members").insert(memberRow);
+        if (memberErr) {
+          console.warn("Kunne ikke opprette prosjektmedlemskap", memberErr);
+        }
+        return normalizeProject(data, memberRow);
+      }
+    }
+
     const newProject: Project = {
       ...projectData,
       id: `project-${Date.now()}`,

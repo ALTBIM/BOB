@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { Project, User, BIMModel, ProjectStatus, ProjectType, db } from "@/lib/database";
 import { uploadIfcFile } from "@/lib/storage";
+import { useSession } from "@/lib/session";
 
 interface ProjectManagementProps {
   selectedProject: string | null;
@@ -33,6 +34,7 @@ interface ProjectManagementProps {
 }
 
 export default function ProjectManagement({ selectedProject, onProjectSelect }: ProjectManagementProps) {
+  const { user } = useSession();
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [models, setModels] = useState<BIMModel[]>([]);
@@ -40,6 +42,7 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [newProject, setNewProject] = useState({
@@ -76,9 +79,14 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
 
   const handleCreateProject = async () => {
     try {
+      if (!user) {
+        setCreateError("Du m\u00e5 v\u00e6re logget inn for \u00e5 opprette prosjekt.");
+        return;
+      }
+      setCreateError(null);
       const project = await db.createProject({
         ...newProject,
-        createdBy: "1" // Current user ID
+        createdBy: user.id
       });
       setProjects(prev => [...prev, project]);
       setNewProject({
@@ -91,7 +99,9 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
         progress: 0
       });
       setIsCreateOpen(false);
+      onProjectSelect(project.id);
     } catch (error) {
+      setCreateError("Kunne ikke opprette prosjekt. Pr\u00f8v igjen.");
       console.error('Failed to create project:', error);
     }
   };
@@ -185,6 +195,7 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
                 Set up a new construction project with team access and file management
               </DialogDescription>
             </DialogHeader>
+            {createError && <p className="text-sm text-red-600">{createError}</p>}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Project Name</Label>

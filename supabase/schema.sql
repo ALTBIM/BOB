@@ -10,9 +10,17 @@ create table if not exists public.projects (
   name text not null,
   description text,
   status text default 'active',
+  client text,
+  location text,
+  type text default 'commercial',
+  progress int default 0,
   created_by uuid,
   created_at timestamptz not null default now()
 );
+alter table public.projects add column if not exists client text;
+alter table public.projects add column if not exists location text;
+alter table public.projects add column if not exists type text;
+alter table public.projects add column if not exists progress int default 0;
 
 -- Project members
 create table if not exists public.project_members (
@@ -357,7 +365,16 @@ drop policy if exists "project_members_delete" on public.project_members;
 create policy "project_members_select" on public.project_members for select
 using (exists (select 1 from public.project_members pm where pm.project_id = project_members.project_id and pm.user_id = auth.uid()));
 create policy "project_members_insert" on public.project_members for insert
-with check (exists (select 1 from public.project_members pm where pm.project_id = project_members.project_id and pm.user_id = auth.uid()));
+with check (
+  exists (select 1 from public.projects p where p.id = project_members.project_id and p.created_by = auth.uid())
+  or exists (
+    select 1
+    from public.project_members pm
+    where pm.project_id = project_members.project_id
+      and pm.user_id = auth.uid()
+      and pm.role in ('prosjektleder','byggherre')
+  )
+);
 create policy "project_members_update" on public.project_members for update
 using (exists (select 1 from public.project_members pm where pm.project_id = project_members.project_id and pm.user_id = auth.uid() and pm.role in ('prosjektleder','byggherre')));
 create policy "project_members_delete" on public.project_members for delete
