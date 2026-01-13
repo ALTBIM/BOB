@@ -548,10 +548,6 @@ class MockDatabase {
         name: projectData.name,
         description: projectData.description || null,
         status: projectData.status,
-        client: projectData.client || null,
-        location: projectData.location || null,
-        type: projectData.type,
-        progress: projectData.progress ?? 0,
         created_by: projectData.createdBy,
         org_id: projectData.orgId || null,
       };
@@ -569,10 +565,6 @@ class MockDatabase {
               name: payload.name,
               description: payload.description,
               status: payload.status,
-              client: payload.client,
-              location: payload.location,
-              type: payload.type,
-              progress: payload.progress,
               orgId: payload.org_id,
             }),
           });

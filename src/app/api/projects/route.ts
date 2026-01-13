@@ -37,10 +37,6 @@ export async function POST(request: Request) {
     name,
     description: body.description || null,
     status: body.status || "planning",
-    client: body.client || null,
-    location: body.location || null,
-    type: body.type || "commercial",
-    progress: Number(body.progress ?? 0),
     created_by: user.id,
     org_id: body.orgId || null,
   };
