@@ -1,7 +1,23 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, Search, Send, Plus, Trash2, BookOpen, Shield, History, Info } from "lucide-react";
+import {
+  MessageCircle,
+  Search,
+  Send,
+  Plus,
+  Trash2,
+  BookOpen,
+  Shield,
+  History,
+  Info,
+  AlertCircle,
+  Paperclip,
+  FileSearch,
+  Sparkles,
+  Check,
+  ChevronDown,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -71,7 +87,7 @@ function nowTime() {
 function normalizeList(value: unknown): string[] {
   if (!value) return [];
   if (Array.isArray(value)) return value.map((v) => String(v)).filter(Boolean);
-  if (typeof value === "string") return value.split(/\n|;|•|-/).map((v) => v.trim()).filter(Boolean);
+  if (typeof value === "string") return value.split(/\n|;|â€¢|-/).map((v) => v.trim()).filter(Boolean);
   return [];
 }
 
@@ -184,12 +200,14 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [styleMode, setStyleMode] = useState<"kort" | "detaljert">("kort");
+  const [mode, setMode] = useState<"qa" | "summarize" | "actions" | "search">("qa");
   const [withSources, setWithSources] = useState(true);
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
   const [newMemoryText, setNewMemoryText] = useState("");
   const [chatError, setChatError] = useState<string | null>(null);
   const { user, accessToken, ready } = useSession();
   const { activeProjectId, activeProject, activeRole, activeAccessLevel } = useActiveProject();
+  const [showSourcesPanel, setShowSourcesPanel] = useState(true);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -243,6 +261,15 @@ export default function ChatPage() {
   if (!user) {
     return <LoginForm />;
   }
+
+      const quickPrompts = [
+    { label: "Oppsummer dokument", text: "Oppsummer de viktigste kravene i siste dokument." },
+    { label: "Finn krav", text: "Hvilke krav gjelder for brann og r\u00f8mningsveier i dette prosjektet?" },
+    { label: "Lag sjekkliste", text: "Lag en sjekkliste for mottakskontroll av vinduer basert p\u00e5 prosjektkrav." },
+    { label: "Finn risikoer", text: "Hvilke topp 5 risikoer ser du n\u00e5 basert p\u00e5 prosjektdata?" },
+    { label: "Foresl\u00e5 m\u00f8te", text: "Foresl\u00e5 et m\u00f8te med agenda for \u00e5 l\u00f8se \u00e5pne avvik i prosjektet." },
+    { label: "S\u00f8k i fremdriftsplan", text: "Finn milep\u00e6ler og oppgaver den neste m\u00e5neden." },
+  ];
 
   const handleSend = async () => {
     const text = input.trim();
@@ -305,6 +332,7 @@ export default function ChatPage() {
           message: text,
           projectId: activeProjectId,
           style: styleMode,
+          mode,
           sources: withSources,
           memory: memoryItems,
           stream: true,
@@ -479,17 +507,14 @@ export default function ChatPage() {
                 <Badge variant="secondary">
                   {activeProject ? activeProject.name : "Ingen prosjekt valgt"}
                 </Badge>
-                {activeRole && (
-                  <Badge variant="outline">
-                    {activeRole}
-                  </Badge>
-                )}
-                {activeAccessLevel && (
-                  <Badge variant="outline">
-                    {activeAccessLevel}
-                  </Badge>
-                )}
+                {activeRole && <Badge variant="outline">{activeRole}</Badge>}
+                {activeAccessLevel && <Badge variant="outline">{activeAccessLevel}</Badge>}
               </div>
+              {!activeProjectId && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Velg prosjekt i sidemenyen for å starte chatten.
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -509,6 +534,16 @@ export default function ChatPage() {
               <Button size="sm" variant={withSources ? "default" : "outline"} onClick={() => setWithSources((v) => !v)}>
                 {withSources ? "Med kilder" : "Uten kilder"}
               </Button>
+              <select
+                className="text-sm border border-border rounded-md bg-background px-3 py-1.5"
+                value={mode}
+                onChange={(e) => setMode(e.target.value as any)}
+              >
+                <option value="qa">Q&A</option>
+                <option value="summarize">Oppsummer</option>
+                <option value="actions">Handlinger</option>
+                <option value="search">S\u00f8k</option>
+              </select>
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -524,6 +559,15 @@ export default function ChatPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] border-b border-border/50">
           <div className="flex-1 overflow-auto p-4 space-y-3 bg-background">
+            {!activeProjectId && (
+              <div className="border border-dashed border-border/70 rounded-lg p-4 bg-muted/40 text-sm text-muted-foreground flex items-center gap-3">
+                <AlertCircle className="h-4 w-4 text-amber-500" />
+                <div>
+                  <p className="font-medium text-foreground">Velg prosjekt for å starte chatten</p>
+                  <p className="text-xs text-muted-foreground">Prosjektkontekst kreves for å aktivere input.</p>
+                </div>
+              </div>
+            )}
             {messages.map((m) => (
               <div
                 key={m.id}
@@ -533,24 +577,38 @@ export default function ChatPage() {
                     : "bg-muted/40 border-border/50 text-foreground"
                 }`}
               >
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-2">
                   <span className="text-xs uppercase tracking-wide text-muted-foreground">
                     {m.author === "user" ? "Du" : "BOB"}
                   </span>
                   <span className="text-xs text-muted-foreground">{m.timestamp}</span>
                 </div>
                 {m.author === "bob" && m.response ? (
-                  <div className="space-y-3 text-sm leading-relaxed">
+                  <div className="space-y-4 text-sm leading-relaxed">
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Konklusjon</p>
-                      <p className="mt-1 whitespace-pre-line">{m.response.conclusion}</p>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Konklusjon</p>
+                      <p className="mt-1 whitespace-pre-line">{m.response.conclusion || "Ingen konklusjon."}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Basis / Kilder</p>
-                      <p className="mt-1 whitespace-pre-line">{m.response.basis}</p>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Basis / Kilder</p>
+                      {m.response.basis ? (
+                        <p className="mt-1 whitespace-pre-line">{m.response.basis}</p>
+                      ) : (
+                        <div className="mt-1 text-muted-foreground text-xs">
+                          Fant ingen kilder i prosjektet som stÃ¸tter dette.
+                          <div className="flex gap-2 mt-2 flex-wrap">
+                            <Button size="sm" variant="outline">
+                              <Paperclip className="h-3 w-3 mr-1.5" /> Last opp dokument
+                            </Button>
+                            <Button size="sm" variant="outline">
+                              <FileSearch className="h-3 w-3 mr-1.5" /> Importer fremdriftsplan
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Anbefalinger</p>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Anbefalinger</p>
                       {m.response.recommendations?.length ? (
                         <ul className="mt-1 list-disc pl-4 space-y-1">
                           {m.response.recommendations.map((rec, idx) => (
@@ -562,7 +620,7 @@ export default function ChatPage() {
                       )}
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Forutsetninger</p>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Forutsetninger</p>
                       {m.response.assumptions?.length ? (
                         <ul className="mt-1 list-disc pl-4 space-y-1">
                           {m.response.assumptions.map((assumption, idx) => (
@@ -573,6 +631,54 @@ export default function ChatPage() {
                         <p className="mt-1 text-muted-foreground">Ingen forutsetninger oppgitt.</p>
                       )}
                     </div>
+                    {m.response.draft_actions?.length ? (
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Utkast til handlinger</p>
+                        <div className="mt-2 grid grid-cols-1 gap-2">
+                          {m.response.draft_actions.map((draft, idx) => (
+                            <div key={`${m.id}-draft-${idx}`} className="border border-border/60 rounded-lg p-3 bg-card/80">
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-medium">{draft.title}</p>
+                                  {draft.description && (
+                                    <p className="text-xs text-muted-foreground mt-1">{draft.description}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex gap-2 mt-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setChatError("Kladdehandlinger mÃ¥ bekreftes senere (ikke aktivert enda).")}
+                                >
+                                  <Check className="h-3 w-3 mr-1.5" /> Opprett
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setChatError("Redigering av kladde er ikke aktivert enda.")}
+                                >
+                                  <Sparkles className="h-3 w-3 mr-1.5" /> Rediger
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {m.response.missing_sources?.length ? (
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Manglende kilder</p>
+                        <ul className="list-disc pl-4 text-xs text-muted-foreground space-y-1 mt-1">
+                          {m.response.missing_sources.map((ms, idx) => (
+                            <li key={`${m.id}-miss-${idx}`}>
+                              <span className="font-medium">{ms.type}:</span> {ms.description}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="text-sm leading-relaxed whitespace-pre-line">{m.content}</p>
@@ -586,78 +692,90 @@ export default function ChatPage() {
             <div className="flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-muted-foreground" />
               <div>
-                <p className="text-sm font-semibold">Kilder</p>
+                <p className="text-sm font-semibold">Kilder & Data</p>
                 <p className="text-xs text-muted-foreground">Prosjektisolert</p>
               </div>
-              <Badge variant="outline" className="ml-auto text-[10px]">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto px-2"
+                onClick={() => setShowSourcesPanel((v) => !v)}
+              >
+                <ChevronDown className={`h-4 w-4 transition-transform ${showSourcesPanel ? "rotate-0" : "-rotate-90"}`} />
+              </Button>
+              <Badge variant="outline" className="text-[10px]">
                 {activeSources.length} funnet
               </Badge>
             </div>
-            {activeSources.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                Ingen kilder mottatt enn\u00e5. Legg til dokumenter/IFC eller kontroller prosjekt-ID.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {activeSources.map((s, idx) => (
-                  <div key={s.id} className="rounded border border-border/60 bg-card/90 p-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-[10px]">
-                          Kilde {idx + 1}
-                        </Badge>
-                        <span className="text-xs font-semibold text-foreground">{s.title}</span>
+            {showSourcesPanel && (
+              <>
+                {activeSources.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Ingen kilder mottatt ennÃ¥. Legg til dokumenter/IFC eller kontroller prosjekt-ID.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {activeSources.map((s, idx) => (
+                      <div key={s.id} className="rounded border border-border/60 bg-card/90 p-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="text-[10px]">
+                              Kilde {idx + 1}
+                            </Badge>
+                            <span className="text-xs font-semibold text-foreground">{s.title}</span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">{s.discipline}</span>
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-1">
+                          {s.url ? (
+                            <a href={s.url} target="_blank" rel="noreferrer" className="underline">
+                              {s.reference}
+                            </a>
+                          ) : (
+                            s.reference
+                          )}
+                        </div>
+                        <div className="text-xs text-foreground mt-1">{s.snippet}</div>
+                        {s.zone && <div className="text-[10px] text-muted-foreground mt-1">Sone: {s.zone}</div>}
+                        <div className="text-[10px] text-muted-foreground mt-1">Score: {s.score.toFixed(2)}</div>
                       </div>
-                      <span className="text-[10px] text-muted-foreground">{s.discipline}</span>
-                    </div>
-                    <div className="text-[10px] text-muted-foreground mt-1">
-                      {s.url ? (
-                        <a href={s.url} target="_blank" rel="noreferrer" className="underline">
-                          {s.reference}
-                        </a>
-                      ) : (
-                        s.reference
-                      )}
-                    </div>
-                    <div className="text-xs text-foreground mt-1">{s.snippet}</div>
-                    {s.zone && <div className="text-[10px] text-muted-foreground mt-1">Sone: {s.zone}</div>}
-                    <div className="text-[10px] text-muted-foreground mt-1">Score: {s.score.toFixed(2)}</div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                )}
 
-            {activeDrafts.length > 0 && (
-              <div className="mt-4 space-y-2">
-                <p className="text-sm font-semibold">Forslag til tiltak</p>
-                {activeDrafts.map((draft, idx) => (
-                  <div key={`${draft.title}-${idx}`} className="rounded border border-border/60 bg-card/90 p-2">
-                    <div className="text-sm font-medium">{draft.title}</div>
-                    {draft.description && <div className="text-xs text-muted-foreground mt-1">{draft.description}</div>}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-2"
-                      onClick={() => setChatError("Kladdehandlinger er ikke aktivert enn\u00e5.")}
-                    >
-                      Opprett
-                    </Button>
+                {activeDrafts.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-sm font-semibold">Forslag til tiltak</p>
+                    {activeDrafts.map((draft, idx) => (
+                      <div key={`${draft.title}-${idx}`} className="rounded border border-border/60 bg-card/90 p-2">
+                        <div className="text-sm font-medium">{draft.title}</div>
+                        {draft.description && <div className="text-xs text-muted-foreground mt-1">{draft.description}</div>}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-2"
+                          onClick={() => setChatError("Kladdehandlinger er ikke aktivert ennÃ¥.")}
+                        >
+                          Opprett
+                        </Button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                )}
 
-            {activeMissingSources.length > 0 && (
-              <div className="mt-4 space-y-2">
-                <p className="text-sm font-semibold">Manglende kilder</p>
-                <ul className="list-disc pl-4 text-xs text-muted-foreground space-y-1">
-                  {activeMissingSources.map((m, idx) => (
-                    <li key={`${m.type}-${idx}`}>
-                      <span className="font-medium">{m.type}:</span> {m.description}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                {activeMissingSources.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-sm font-semibold">Manglende kilder</p>
+                    <ul className="list-disc pl-4 text-xs text-muted-foreground space-y-1">
+                      {activeMissingSources.map((m, idx) => (
+                        <li key={`${m.type}-${idx}`}>
+                          <span className="font-medium">{m.type}:</span> {m.description}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -756,3 +874,14 @@ export default function ChatPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
