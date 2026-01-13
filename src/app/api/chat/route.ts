@@ -12,11 +12,11 @@ const SIGNED_URL_TTL = 60 * 60;
 const SYSTEM_PROMPT = [
   "Du er BOB, en faglig, prosjekt-isolert assistent for bygg/BIM.",
   "- Bruk kun gitt kontekst og prosjektkilder. Ingen kryss-prosjekt deling.",
-  "- V\u00e6r faktabasert og presis. Ingen gjetting eller tall uten kilde.",
-  "- Hvis ingen kilder finnes, si eksplisitt at kilder mangler og foresl\u00e5 hva som m\u00e5 lastes opp.",
-  "- Rolle-tilpasning: tilpass vinkling etter brukerrolle, men hold n\u00f8kternt og profesjonelt.",
-  "- Tone: Kort, profesjonell, n\u00f8ytral. Ikke sm\u00e5prat.",
-  "- Returner kun gyldig JSON (ingen markdown).",
+  "- Hvis kilder mangler: svar at du ikke kan konkludere uten prosjektkilder.",
+  "- Ingen gjetting, ingen standardtall, ingen antakelser uten kilder.",
+  "- Rolle-tilpasning: vektlegg brukerens rolle, men hold n\u00f8kternt og profesjonelt.",
+  "- Svarformat M\u00c5 v\u00e6re JSON med n\u00f8klene: conclusion, basis, recommendations, assumptions, draft_actions, missing_sources.",
+  "- Ikke bruk markdown, ikke legg til andre felter.",
 ].join("\n");
 
 type ChatMemory = { id: string; text: string };
@@ -55,6 +55,18 @@ type ChatEnvelope = {
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const ROLE_FOCUS: Record<string, string> = {
+  byggherre: "risiko, ansvar, kost, kontrakt",
+  prosjektleder: "fremdrift, beslutninger, koordinering",
+  bas_byggeledelse: "utf\u00f8relse, rekkef\u00f8lge, kvalitet p\u00e5 byggeplass",
+  prosjekterende_ark: "l\u00f8sninger, krav, arkitektur",
+  prosjekterende_rib: "konstruksjon, dimensjonering, sikkerhet",
+  prosjekterende_riv: "VVS, funksjon, drift",
+  prosjekterende_rie: "elektro, sikkerhet, drift",
+  leverandor_logistikk: "leveranser, logistikk, tidsvinduer",
+  kvalitet_hms: "HMS, avvik, kravoppfyllelse",
+};
 
 const normalizeStringList = (value: unknown): string[] => {
   if (!value) return [];
@@ -163,10 +175,12 @@ function buildUserPrompt(params: {
   const memoryText = memory?.length ? memory.map((m) => `- ${m.text}`).join("\n") : "Ingen ekstra prosjektkontekst oppgitt.";
   const styleText = style === "detaljert" ? "Detaljert, men konsis." : "Kortfattet.";
   const sourceText = withSources ? "Ta hensyn til kildene og oppgi dem i basis." : "Svar uten \u00e5 liste kilder.";
+  const focus = ROLE_FOCUS[role] ? `Rollefokus: ${ROLE_FOCUS[role]}` : "Rollefokus: ukjent";
 
   return [
     `Prosjekt-ID: ${projectId}`,
     `Brukerrolle: ${role || "ukjent"}`,
+    focus,
     `Svarstil: ${styleText}`,
     `Kildepolicy: ${sourceText}`,
     "Tilgjengelige kilder/utdrag:",
@@ -294,6 +308,51 @@ export async function POST(request: Request) {
         { type: "pdf", description: "Last opp relevante PDF-krav og beskrivelse." },
         { type: "schedule", description: "Last opp fremdriftsplan (XLSX/CSV)." },
       ];
+
+  if (!retrievedSources.length) {
+    const fallback: ChatEnvelope = {
+      conclusion: "Kan ikke gi et faglig svar uten prosjektkilder.",
+      basis: "Ingen kilder funnet i prosjektet.",
+      recommendations: [
+        "Last opp relevante prosjektfiler (IFC, PDF-krav, beskrivelser, fremdriftsplan).",
+        "Knytt dokumentene til riktig prosjekt og pr\u00f8v p\u00e5 nytt.",
+      ],
+      assumptions: ["Ingen kilder tilgjengelig for dette prosjektet."],
+      draft_actions: [],
+      missing_sources: missingSourcesFallback,
+      sources: signedSources,
+    };
+
+    const rawText = JSON.stringify(fallback);
+    await logToDb(supabase, threadId, projectId, user.id, "assistant", rawText, signedSources, signedSources, usedChunkIds);
+    logInteraction({
+      projectId,
+      userId: user.id,
+      role,
+      prompt: message,
+      retrievedSources,
+      answer: rawText,
+    });
+
+    if (wantsStream) {
+      const stream = new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder();
+          controller.enqueue(encoder.encode(toSse("done", { ok: false, error: "NO_SOURCES", response: fallback })));
+          controller.close();
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
+    return NextResponse.json({ ok: false, error: "NO_SOURCES", response: fallback }, { status: 200 });
+  }
 
   if (!apiKey) {
     const fallback: ChatEnvelope = {
