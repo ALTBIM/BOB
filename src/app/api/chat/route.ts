@@ -461,7 +461,7 @@ export async function POST(request: Request) {
       answer: rawText,
     });
 
-    return NextResponse.json({ ok: false, error: "MISSING_OPENAI_KEY", response: fallback }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "MISSING_OPENAI_KEY", response: fallback }, { status: 200 });
   }
 
   const openAiPayload = {
