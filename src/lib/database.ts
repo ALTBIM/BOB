@@ -551,6 +551,7 @@ class MockDatabase {
         created_by: projectData.createdBy,
         org_id: projectData.orgId || null,
       };
+      let apiError: string | null = null;
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData.session?.access_token;
@@ -573,15 +574,19 @@ class MockDatabase {
             if (json?.project) {
               return normalizeProject(json.project, json.member);
             }
+          } else {
+            const text = await res.text();
+            apiError = text || `API-feil (${res.status})`;
           }
         }
-      } catch (err) {
-        console.warn("Kunne ikke opprette prosjekt via API", err);
+      } catch (err: any) {
+        apiError = err?.message || "Ukjent API-feil";
       }
 
       const { data, error } = await supabase.from("projects").insert(payload).select("*").single();
       if (error) {
-        throw error;
+        const details = apiError ? `${apiError} | ${error.message}` : error.message;
+        throw new Error(details);
       }
       if (data) {
         const permissions: Permission[] = [

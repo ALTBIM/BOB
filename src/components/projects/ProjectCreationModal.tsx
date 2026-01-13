@@ -69,9 +69,9 @@ export default function ProjectCreationModal({ onProjectCreate }: ProjectCreatio
         budget: "",
         client: ""
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Kunne ikke opprette prosjekt", err);
-      setError("Kunne ikke opprette prosjekt. Pr\u00f8v igjen.");
+      setError(err?.message || "Kunne ikke opprette prosjekt. Pr\u00f8v igjen.");
     } finally {
       setIsLoading(false);
     }
