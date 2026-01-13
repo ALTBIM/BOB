@@ -63,6 +63,7 @@ type ChatEnvelope = {
   draft_actions: DraftAction[];
   missing_sources: MissingSource[];
   sources: ChatSource[];
+  context?: "general" | "project" | "project_missing";
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -77,6 +78,60 @@ const ROLE_FOCUS: Record<string, string> = {
   prosjekterende_rie: "elektro, sikkerhet, drift",
   leverandor_logistikk: "leveranser, logistikk, tidsvinduer",
   kvalitet_hms: "HMS, avvik, kravoppfyllelse",
+};
+
+const classifyIntent = (text: string) => {
+  const lower = text.toLowerCase();
+  const projectKeywords = [
+    "prosjekt",
+    "ifc",
+    "modell",
+    "modellfil",
+    "plantegning",
+    "tegning",
+    "dwg",
+    "rom",
+    "sone",
+    "etasj",
+    "areal",
+    "volum",
+    "leveranse",
+    "fremdrift",
+    "milepæl",
+    "dato",
+    "schedule",
+    "oppgave",
+    "avvik",
+    "rfi",
+    "kontrakt",
+    "fdv",
+    "kappliste",
+    "mengde",
+  ];
+  const isProjectSpecific = projectKeywords.some((kw) => lower.includes(kw));
+  return isProjectSpecific ? "project" : "general";
+};
+
+const suggestMissingSources = (text: string): MissingSource[] => {
+  const lower = text.toLowerCase();
+  const missing: MissingSource[] = [];
+  const push = (type: string, description: string) => missing.push({ type, description });
+  if (/(rom|sone|etasj|areal|plantegning|tegning|dwg)/.test(lower)) {
+    push("plantegning/IFC", "Last opp plantegninger eller IFC med rom/soner/areal.");
+  }
+  if (/(ifc|modell)/.test(lower)) {
+    push("ifc", "Last opp IFC-modell for mengder/objekter/soner.");
+  }
+  if (/(fremdrift|dato|milep|schedule|plan)/.test(lower)) {
+    push("fremdriftsplan", "Importer fremdriftsplan (XLSX/CSV) for datoer og milepæler.");
+  }
+  if (/(krav|beskrivelse|spesifikasjon|teknisk krav)/.test(lower)) {
+    push("krav/PDF", "Last opp kravspesifikasjon eller beskrivelse (PDF/tekst).");
+  }
+  if (!missing.length) {
+    push("kilder", "Last opp relevante prosjektfiler (IFC, PDF-krav, beskrivelser, fremdriftsplan).");
+  }
+  return missing;
 };
 
 const normalizeStringList = (value: unknown): string[] => {
@@ -304,6 +359,7 @@ export async function POST(request: Request) {
   const threadId = await ensureThread(supabase, projectId, user.id);
   await logToDb(supabase, threadId, projectId, user.id, "user", message);
 
+  const intent = classifyIntent(message);
   const { sources: retrievedSources, contextText } = await retrieveContext(projectId, message);
   const signedSources = withSources ? await signSources(supabase, retrievedSources) : [];
   const usedChunkIds = retrievedSources.map((s) => s.id).filter((id) => UUID_RE.test(id));
@@ -321,17 +377,15 @@ export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
   const chatModel = process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini";
 
-  const missingSourcesFallback: MissingSource[] = retrievedSources.length
-    ? []
-    : [
-        { type: "ifc", description: "Last opp IFC-modell for mengder/objekter/soner." },
-        { type: "pdf", description: "Last opp relevante PDF-krav og beskrivelse." },
-        { type: "schedule", description: "Last opp fremdriftsplan (XLSX/CSV)." },
-      ];
+  const missingSourcesFallback: MissingSource[] = hasSources ? [] : missingFromIntent;
+
+  // GENERAL mode: tillat vanlig prat uten kilder, men merk som general.
+  const generalMode = intent === "general";
 
   const hasSources = retrievedSources.length > 0;
+  const missingFromIntent = suggestMissingSources(message);
 
-  if (!hasSources && !allowGeneral) {
+  if (!hasSources && !generalMode && !allowGeneral) {
     const fallback: ChatEnvelope = {
       conclusion: "Kan ikke gi et faglig svar uten prosjektkilder.",
       basis: "Ingen kilder funnet i prosjektet.",
@@ -343,6 +397,7 @@ export async function POST(request: Request) {
       draft_actions: [],
       missing_sources: missingSourcesFallback,
       sources: signedSources,
+      context: "project_missing",
     };
 
     const rawText = JSON.stringify(fallback);
@@ -381,7 +436,9 @@ export async function POST(request: Request) {
       conclusion: "Kan ikke kontakte modellen (mangler OPENAI_API_KEY).",
       basis: hasSources
         ? "Svar basert p\u00e5 tilgjengelige prosjektkilder."
-        : "Ingen prosjektkilder funnet. Generell veiledning er utilgjengelig uten modell.",
+        : generalMode
+          ? "Ingen modelltilgang. Kan ikke gi generelt svar n\u00e5."
+          : "Ingen prosjektkilder funnet. Generell veiledning er utilgjengelig uten modell.",
       recommendations: [
         "Legg inn API-n\u00f8kkel.",
         "Last opp prosjektkilder (IFC/PDF/krav) for RAG-svar.",
@@ -390,6 +447,7 @@ export async function POST(request: Request) {
       draft_actions: [],
       missing_sources: missingSourcesFallback,
       sources: signedSources,
+      context: generalMode ? "general" : hasSources ? "project" : "project_missing",
     };
 
     const rawText = JSON.stringify(fallback);
@@ -532,6 +590,7 @@ export async function POST(request: Request) {
           draft_actions: normalizeDraftActions(parsed.draft_actions),
           missing_sources: normalizeMissingSources(parsed.missing_sources, missingSourcesFallback),
           sources: signedSources,
+          context: hasSources ? "project" : generalMode ? "general" : "project_missing",
         };
         if (!hasSources) {
           envelope.basis = ensureNoSourceBasis(envelope.basis);
@@ -633,6 +692,7 @@ export async function POST(request: Request) {
     draft_actions: normalizeDraftActions(parsed.draft_actions),
     missing_sources: normalizeMissingSources(parsed.missing_sources, missingSourcesFallback),
     sources: signedSources,
+    context: hasSources ? "project" : generalMode ? "general" : "project_missing",
   };
   if (!hasSources) {
     envelope.basis = ensureNoSourceBasis(envelope.basis);
