@@ -583,7 +583,15 @@ class MockDatabase {
         apiError = err?.message || "Ukjent API-feil";
       }
 
-      const { data, error } = await supabase.from("projects").insert(payload).select("*").single();
+      const insertProject = async (includeOrg: boolean) => {
+        const body = includeOrg && payload.org_id ? { ...payload } : { ...payload, org_id: undefined };
+        return supabase.from("projects").insert(body).select("*").single();
+      };
+
+      let { data, error } = await insertProject(true);
+      if (error?.code === "PGRST204" && error.message?.includes("org_id")) {
+        ({ data, error } = await insertProject(false));
+      }
       if (error) {
         const details = apiError ? `${apiError} | ${error.message}` : error.message;
         throw new Error(details);

@@ -38,21 +38,25 @@ export async function POST(request: Request) {
     description: body.description || null,
     status: body.status || "planning",
     created_by: user.id,
-    org_id: body.orgId || null,
   };
 
-  if (payload.org_id) {
-    const access = await requireOrgAdmin(supabase, payload.org_id, user.id);
+  const orgId = body.orgId || null;
+  if (orgId) {
+    const access = await requireOrgAdmin(supabase, orgId, user.id);
     if (!access.ok) {
       return NextResponse.json({ error: access.error || "Ingen tilgang til organisasjon." }, { status: 403 });
     }
   }
 
-  const { data: project, error: projectError } = await supabase
-    .from("projects")
-    .insert(payload)
-    .select("*")
-    .single();
+  const insertProject = async (includeOrg: boolean) => {
+    const bodyPayload = includeOrg && orgId ? { ...payload, org_id: orgId } : payload;
+    return supabase.from("projects").insert(bodyPayload).select("*").single();
+  };
+
+  let { data: project, error: projectError } = await insertProject(true);
+  if (projectError?.code === "PGRST204" && projectError.message?.includes("org_id")) {
+    ({ data: project, error: projectError } = await insertProject(false));
+  }
 
   if (projectError || !project) {
     return NextResponse.json({ error: projectError?.message || "Kunne ikke opprette prosjekt." }, { status: 500 });
