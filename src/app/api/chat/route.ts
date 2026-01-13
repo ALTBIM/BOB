@@ -19,6 +19,16 @@ const SYSTEM_PROMPT = [
   "- Ikke bruk markdown, ikke legg til andre felter.",
 ].join("\n");
 
+const SYSTEM_PROMPT_GENERAL = [
+  "Du er BOB, en faglig assistent for bygg/BIM.",
+  "- Det finnes ingen prosjektkilder tilgjengelig for dette sp\u00f8rsm\u00e5let.",
+  "- Du kan gi generell veiledning og stille avklarende sp\u00f8rsm\u00e5l, men IKKE gi prosjektspesifikke p\u00e5stander.",
+  "- Merk tydelig at svaret er generelt og ikke basert p\u00e5 prosjektkilder.",
+  "- Ikke bruk standardtall/krav som kan oppfattes som prosjektfakta.",
+  "- Svarformat M\u00c5 v\u00e6re JSON med n\u00f8klene: conclusion, basis, recommendations, assumptions, draft_actions, missing_sources.",
+  "- Ikke bruk markdown, ikke legg til andre felter.",
+].join("\n");
+
 type ChatMemory = { id: string; text: string };
 
 type ChatBody = {
@@ -27,6 +37,7 @@ type ChatBody = {
   style?: "kort" | "detaljert";
   sources?: boolean;
   memory?: ChatMemory[];
+  general?: boolean;
   stream?: boolean;
 };
 
@@ -119,6 +130,14 @@ const normalizeMissingSources = (value: unknown, fallback: MissingSource[]): Mis
     return mapped.length ? mapped : fallback;
   }
   return fallback;
+};
+
+const ensureNoSourceBasis = (basis: string) => {
+  const normalized = basis.trim();
+  if (!normalized) return "Ingen kilder funnet i prosjektet. Svaret er generell veiledning.";
+  const lowered = normalized.toLowerCase();
+  if (lowered.includes("ingen kilder")) return normalized;
+  return `Ingen kilder funnet i prosjektet. ${normalized}`;
 };
 
 const extractJson = (text: string): Record<string, unknown> | null => {
@@ -255,6 +274,7 @@ export async function POST(request: Request) {
   const style = body?.style ?? "kort";
   const withSources = Boolean(body?.sources ?? true);
   const memory = body?.memory ?? [];
+  const allowGeneral = body?.general !== false;
   const wantsStream = body?.stream !== false;
 
   if (!message.trim()) {
@@ -309,7 +329,9 @@ export async function POST(request: Request) {
         { type: "schedule", description: "Last opp fremdriftsplan (XLSX/CSV)." },
       ];
 
-  if (!retrievedSources.length) {
+  const hasSources = retrievedSources.length > 0;
+
+  if (!hasSources && !allowGeneral) {
     const fallback: ChatEnvelope = {
       conclusion: "Kan ikke gi et faglig svar uten prosjektkilder.",
       basis: "Ingen kilder funnet i prosjektet.",
@@ -357,9 +379,9 @@ export async function POST(request: Request) {
   if (!apiKey) {
     const fallback: ChatEnvelope = {
       conclusion: "Kan ikke kontakte modellen (mangler OPENAI_API_KEY).",
-      basis: retrievedSources.length
+      basis: hasSources
         ? "Svar basert p\u00e5 tilgjengelige prosjektkilder."
-        : "Ingen prosjektkilder funnet.",
+        : "Ingen prosjektkilder funnet. Generell veiledning er utilgjengelig uten modell.",
       recommendations: [
         "Legg inn API-n\u00f8kkel.",
         "Last opp prosjektkilder (IFC/PDF/krav) for RAG-svar.",
@@ -388,7 +410,7 @@ export async function POST(request: Request) {
     model: chatModel,
     response_format: { type: "json_object" as const },
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: hasSources ? SYSTEM_PROMPT : SYSTEM_PROMPT_GENERAL },
       { role: "user", content: userPrompt },
     ],
   };
@@ -511,6 +533,12 @@ export async function POST(request: Request) {
           missing_sources: normalizeMissingSources(parsed.missing_sources, missingSourcesFallback),
           sources: signedSources,
         };
+        if (!hasSources) {
+          envelope.basis = ensureNoSourceBasis(envelope.basis);
+          if (!envelope.assumptions.length) {
+            envelope.assumptions = ["Svar uten prosjektkilder."];
+          }
+        }
 
         const rawText = JSON.stringify(envelope);
         controller.enqueue(encoder.encode(toSse("done", { ok: true, response: envelope })));
@@ -606,6 +634,12 @@ export async function POST(request: Request) {
     missing_sources: normalizeMissingSources(parsed.missing_sources, missingSourcesFallback),
     sources: signedSources,
   };
+  if (!hasSources) {
+    envelope.basis = ensureNoSourceBasis(envelope.basis);
+    if (!envelope.assumptions.length) {
+      envelope.assumptions = ["Svar uten prosjektkilder."];
+    }
+  }
 
   const rawText = JSON.stringify(envelope);
   await logToDb(supabase, threadId, projectId, user.id, "assistant", rawText, signedSources, signedSources, usedChunkIds);
