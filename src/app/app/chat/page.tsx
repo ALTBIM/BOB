@@ -21,6 +21,7 @@ interface ChatMessage {
   author: "user" | "bob";
   content: string;
   timestamp: string;
+  response?: ChatResponse;
 }
 
 interface MemoryItem {
@@ -29,7 +30,7 @@ interface MemoryItem {
   createdAt: string;
 }
 
-interface RetrievedSource {
+interface ChatSource {
   id: string;
   projectId: string;
   title: string;
@@ -38,10 +39,40 @@ interface RetrievedSource {
   zone?: string;
   snippet: string;
   score: number;
+  url?: string | null;
+}
+
+interface DraftAction {
+  title: string;
+  description?: string;
+  type?: string;
+  payload?: Record<string, unknown>;
+}
+
+interface MissingSource {
+  type: string;
+  description: string;
+}
+
+interface ChatResponse {
+  conclusion: string;
+  basis: string;
+  recommendations: string[];
+  assumptions: string[];
+  draft_actions: DraftAction[];
+  missing_sources: MissingSource[];
+  sources: ChatSource[];
 }
 
 function nowTime() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function normalizeList(value: unknown): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map((v) => String(v)).filter(Boolean);
+  if (typeof value === "string") return value.split(/\n|;|•|-/).map((v) => v.trim()).filter(Boolean);
+  return [];
 }
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -94,7 +125,6 @@ export default function ChatPage() {
   const [withSources, setWithSources] = useState(true);
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
   const [newMemoryText, setNewMemoryText] = useState("");
-  const [sourcesByConversation, setSourcesByConversation] = useState<Record<string, RetrievedSource[]>>({});
   const [chatError, setChatError] = useState<string | null>(null);
   const { user, accessToken, ready } = useSession();
   const { activeProjectId, activeProject, activeRole, activeAccessLevel } = useActiveProject();
@@ -131,7 +161,10 @@ export default function ChatPage() {
   }, [memoryItems, activeProjectId]);
 
   const messages = messagesByConversation[activeConversationId] || [];
-  const activeSources = sourcesByConversation[activeConversationId] || [];
+  const latestResponse = [...messages].reverse().find((m) => m.author === "bob" && m.response)?.response;
+  const activeSources = latestResponse?.sources || [];
+  const activeDrafts = latestResponse?.draft_actions || [];
+  const activeMissingSources = latestResponse?.missing_sources || [];
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -160,6 +193,11 @@ export default function ChatPage() {
       setChatError("Mangler p\u00e5logging. Logg inn p\u00e5 nytt.");
       return;
     }
+    const canWrite = activeAccessLevel === "write" || activeAccessLevel === "admin";
+    if (!canWrite) {
+      setChatError("Du har kun lesetilgang i dette prosjektet. Be en admin om skrive-tilgang.");
+      return;
+    }
     setInput("");
     setChatError(null);
 
@@ -181,7 +219,7 @@ export default function ChatPage() {
       ...prev,
       [activeConversationId]: [
         ...(prev[activeConversationId] || []),
-        { id: botMsgId, author: "bob", content: "", timestamp: nowTime() },
+        { id: botMsgId, author: "bob", content: "BOB tenker...", timestamp: nowTime() },
       ],
     }));
 
@@ -198,52 +236,32 @@ export default function ChatPage() {
         }),
       });
 
-      const contentType = response.headers.get("content-type") || "";
-      if (!response.ok || !response.body || !contentType.includes("text/event-stream")) {
-        const errorText = await response.text();
-        throw new Error(
-          `Chat API feilet (${response.status}). ${errorText?.length ? `Server sa: ${errorText}` : "Ingen respons fra server."}`
-        );
+      const data = (await response.json().catch(() => ({}))) as { response?: ChatResponse; error?: string };
+      if (!response.ok) {
+        setChatError(data?.error || `Chat API feilet (${response.status}).`);
+      }
+      if (!data?.response) {
+        throw new Error(data?.error || "Ingen gyldig respons fra server.");
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let aggregated = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
-
-        for (const part of parts) {
-          if (part.startsWith("data: ")) {
-            const chunk = part.replace("data: ", "").trim();
-            if (chunk.startsWith("SOURCES::")) {
-              const json = chunk.replace("SOURCES::", "");
-              try {
-                const parsed = JSON.parse(json) as RetrievedSource[];
-                setSourcesByConversation((prev) => ({
-                  ...prev,
-                  [activeConversationId]: parsed,
-                }));
-              } catch {
-                // ignore malformed metadata
+      const payload = data.response;
+      setMessagesByConversation((prev) => ({
+        ...prev,
+        [activeConversationId]: (prev[activeConversationId] || []).map((m) =>
+          m.id === botMsgId
+            ? {
+                ...m,
+                content: payload.conclusion || "Ingen konklusjon mottatt.",
+                timestamp: nowTime(),
+                response: {
+                  ...payload,
+                  recommendations: normalizeList(payload.recommendations),
+                  assumptions: normalizeList(payload.assumptions),
+                },
               }
-              continue;
-            }
-            aggregated = aggregated ? `${aggregated}\n${chunk}` : chunk;
-            setMessagesByConversation((prev) => ({
-              ...prev,
-              [activeConversationId]: (prev[activeConversationId] || []).map((m) =>
-                m.id === botMsgId ? { ...m, content: aggregated, timestamp: nowTime() } : m
-              ),
-            }));
-          }
-        }
-      }
+            : m
+        ),
+      }));
     } catch (err: any) {
       setMessagesByConversation((prev) => ({
         ...prev,
@@ -418,7 +436,44 @@ export default function ChatPage() {
                   </span>
                   <span className="text-xs text-muted-foreground">{m.timestamp}</span>
                 </div>
-                <p className="text-sm leading-relaxed whitespace-pre-line">{m.content}</p>
+                {m.author === "bob" && m.response ? (
+                  <div className="space-y-3 text-sm leading-relaxed">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Konklusjon</p>
+                      <p className="mt-1 whitespace-pre-line">{m.response.conclusion}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Basis / Kilder</p>
+                      <p className="mt-1 whitespace-pre-line">{m.response.basis}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Anbefalinger</p>
+                      {m.response.recommendations?.length ? (
+                        <ul className="mt-1 list-disc pl-4 space-y-1">
+                          {m.response.recommendations.map((rec, idx) => (
+                            <li key={`${m.id}-rec-${idx}`}>{rec}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-1 text-muted-foreground">Ingen anbefalinger oppgitt.</p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Forutsetninger</p>
+                      {m.response.assumptions?.length ? (
+                        <ul className="mt-1 list-disc pl-4 space-y-1">
+                          {m.response.assumptions.map((assumption, idx) => (
+                            <li key={`${m.id}-ass-${idx}`}>{assumption}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-1 text-muted-foreground">Ingen forutsetninger oppgitt.</p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm leading-relaxed whitespace-pre-line">{m.content}</p>
+                )}
               </div>
             ))}
             <div ref={bottomRef} />
@@ -452,12 +507,53 @@ export default function ChatPage() {
                       </div>
                       <span className="text-[10px] text-muted-foreground">{s.discipline}</span>
                     </div>
-                    <div className="text-[10px] text-muted-foreground mt-1">{s.reference}</div>
+                    <div className="text-[10px] text-muted-foreground mt-1">
+                      {s.url ? (
+                        <a href={s.url} target="_blank" rel="noreferrer" className="underline">
+                          {s.reference}
+                        </a>
+                      ) : (
+                        s.reference
+                      )}
+                    </div>
                     <div className="text-xs text-foreground mt-1">{s.snippet}</div>
                     {s.zone && <div className="text-[10px] text-muted-foreground mt-1">Sone: {s.zone}</div>}
                     <div className="text-[10px] text-muted-foreground mt-1">Score: {s.score.toFixed(2)}</div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {activeDrafts.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-sm font-semibold">Forslag til tiltak</p>
+                {activeDrafts.map((draft, idx) => (
+                  <div key={`${draft.title}-${idx}`} className="rounded border border-border bg-card/90 p-2">
+                    <div className="text-sm font-medium">{draft.title}</div>
+                    {draft.description && <div className="text-xs text-muted-foreground mt-1">{draft.description}</div>}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2"
+                      onClick={() => setChatError("Kladdehandlinger er ikke aktivert enn\u00e5.")}
+                    >
+                      Opprett
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeMissingSources.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-sm font-semibold">Manglende kilder</p>
+                <ul className="list-disc pl-4 text-xs text-muted-foreground space-y-1">
+                  {activeMissingSources.map((m, idx) => (
+                    <li key={`${m.type}-${idx}`}>
+                      <span className="font-medium">{m.type}:</span> {m.description}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
@@ -470,7 +566,7 @@ export default function ChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               className="flex-1"
-              disabled={!activeProjectId || !accessToken}
+              disabled={!activeProjectId || !accessToken || !(activeAccessLevel === "write" || activeAccessLevel === "admin")}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -480,7 +576,13 @@ export default function ChatPage() {
             />
             <Button
               type="button"
-              disabled={!input.trim() || isSending || !activeProjectId || !accessToken}
+              disabled={
+                !input.trim() ||
+                isSending ||
+                !activeProjectId ||
+                !accessToken ||
+                !(activeAccessLevel === "write" || activeAccessLevel === "admin")
+              }
               onClick={handleSend}
             >
               <Send className="h-4 w-4 mr-2" />
@@ -490,6 +592,11 @@ export default function ChatPage() {
           {!activeProjectId && (
             <p className="text-xs text-muted-foreground mt-2">
               Velg prosjekt i sidemenyen f\u00f8r du starter chatten.
+            </p>
+          )}
+          {activeProjectId && !(activeAccessLevel === "write" || activeAccessLevel === "admin") && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Du har kun lesetilgang i dette prosjektet. Be en admin om skrive-tilgang for \u00e5 sende meldinger.
             </p>
           )}
           <p className="text-xs text-muted-foreground mt-2">

@@ -6,14 +6,17 @@ import { getAuthUser, requireProjectAccess } from "@/lib/supabase-auth";
 
 export const runtime = "nodejs";
 
+const FILE_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_FILE_BUCKET || "project-files";
+const SIGNED_URL_TTL = 60 * 60;
+
 const SYSTEM_PROMPT = [
   "Du er BOB, en faglig, prosjekt-isolert assistent for bygg/BIM.",
   "- Bruk kun gitt kontekst og prosjektkilder. Ingen kryss-prosjekt deling.",
-  "- Struktur (alltid): 1) Konklusjon 2) Basis / Kilder 3) Anbefalinger 4) Forutsetninger & antakelser.",
   "- V\u00e6r faktabasert og presis. Ingen gjetting eller tall uten kilde.",
-  "- Hvis ingen kilder finnes, si eksplisitt at kilder mangler og foresl\u00e5 hvilke dokumenter/IFC/standarder som trengs.",
+  "- Hvis ingen kilder finnes, si eksplisitt at kilder mangler og foresl\u00e5 hva som m\u00e5 lastes opp.",
   "- Rolle-tilpasning: tilpass vinkling etter brukerrolle, men hold n\u00f8kternt og profesjonelt.",
   "- Tone: Kort, profesjonell, n\u00f8ytral. Ikke sm\u00e5prat.",
+  "- Returner kun gyldig JSON (ingen markdown).",
 ].join("\n");
 
 type ChatMemory = { id: string; text: string };
@@ -25,6 +28,123 @@ type ChatBody = {
   sources?: boolean;
   memory?: ChatMemory[];
 };
+
+type ChatSource = RetrievedSource & { url?: string | null };
+
+type DraftAction = {
+  title: string;
+  description?: string;
+  type?: string;
+  payload?: Record<string, unknown>;
+};
+
+type MissingSource = {
+  type: string;
+  description: string;
+};
+
+type ChatEnvelope = {
+  conclusion: string;
+  basis: string;
+  recommendations: string[];
+  assumptions: string[];
+  draft_actions: DraftAction[];
+  missing_sources: MissingSource[];
+  sources: ChatSource[];
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const normalizeStringList = (value: unknown): string[] => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v)).map((v) => v.trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/\n|;|•|-/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }
+  return [];
+};
+
+const normalizeDraftActions = (value: unknown): DraftAction[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const obj = item as Record<string, unknown>;
+      const title = String(obj.title || obj.name || "").trim();
+      if (!title) return null;
+      const description = obj.description ? String(obj.description) : undefined;
+      const type = obj.type ? String(obj.type) : undefined;
+      const payload = obj.payload && typeof obj.payload === "object" ? (obj.payload as Record<string, unknown>) : undefined;
+      return { title, description, type, payload };
+    })
+    .filter(Boolean) as DraftAction[];
+};
+
+const normalizeMissingSources = (value: unknown, fallback: MissingSource[]): MissingSource[] => {
+  if (!value) return fallback;
+  if (Array.isArray(value)) {
+    const mapped = value
+      .map((item) => {
+        if (typeof item === "string") {
+          return { type: "ukjent", description: item };
+        }
+        if (item && typeof item === "object") {
+          const obj = item as Record<string, unknown>;
+          const type = String(obj.type || "ukjent");
+          const description = String(obj.description || obj.title || "");
+          if (!description) return null;
+          return { type, description };
+        }
+        return null;
+      })
+      .filter(Boolean) as MissingSource[];
+    return mapped.length ? mapped : fallback;
+  }
+  return fallback;
+};
+
+const extractJson = (text: string): Record<string, unknown> | null => {
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+};
+
+async function signSources(
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  sources: RetrievedSource[]
+): Promise<ChatSource[]> {
+  if (!supabase || !sources.length) return sources;
+  const signed: ChatSource[] = [];
+  for (const source of sources) {
+    let url: string | null = null;
+    const path = source.sourcePath || "";
+    if (path.startsWith("http")) {
+      url = path;
+    } else if (path) {
+      const { data } = await supabase.storage.from(FILE_BUCKET).createSignedUrl(path, SIGNED_URL_TTL);
+      url = data?.signedUrl || null;
+    }
+    signed.push({ ...source, url });
+  }
+  return signed;
+}
 
 function buildUserPrompt(params: {
   message: string;
@@ -38,7 +158,7 @@ function buildUserPrompt(params: {
   const { message, projectId, role, style, withSources, memory, contextText } = params;
   const memoryText = memory?.length ? memory.map((m) => `- ${m.text}`).join("\n") : "Ingen ekstra prosjektkontekst oppgitt.";
   const styleText = style === "detaljert" ? "Detaljert, men konsis." : "Kortfattet.";
-  const sourceText = withSources ? "Ta med kilde-IDer i del 2." : "Hvis kilder finnes, referer kort uten \u00e5 liste alt.";
+  const sourceText = withSources ? "Ta hensyn til kildene og oppgi dem i basis." : "Svar uten \u00e5 liste kilder.";
 
   return [
     `Prosjekt-ID: ${projectId}`,
@@ -52,7 +172,15 @@ function buildUserPrompt(params: {
     "Brukersp\u00f8rsm\u00e5l:",
     message,
     "",
-    "Gi svaret med fire overskrifter som beskrevet i systemprompten.",
+    "Svar som JSON med feltene:",
+    "{",
+    '  "conclusion": string,',
+    '  "basis": string,',
+    '  "recommendations": string[],',
+    '  "assumptions": string[],',
+    '  "draft_actions": [{ "title": string, "description": string, "type": string, "payload": object }],',
+    '  "missing_sources": [{ "type": string, "description": string }]',
+    "}",
   ].join("\n");
 }
 
@@ -81,7 +209,9 @@ async function logToDb(
   userId: string,
   role: "user" | "assistant",
   content: string,
-  sources: RetrievedSource[] = []
+  sources: ChatSource[] = [],
+  citations: ChatSource[] = [],
+  usedChunkIds: string[] = []
 ) {
   if (!supabase || !threadId) return;
   try {
@@ -92,44 +222,12 @@ async function logToDb(
       role,
       content,
       sources: sources.length ? sources : [],
+      citations: citations.length ? citations : [],
+      used_chunk_ids: usedChunkIds.length ? usedChunkIds : [],
     });
   } catch (err) {
     console.warn("Kunne ikke logge chat-melding", err);
   }
-}
-
-function streamSyntheticAnswer(
-  answer: string,
-  meta: { projectId: string; prompt: string; role: string; sources: RetrievedSource[]; userId: string }
-) {
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    start(controller) {
-      answer.split("\n").forEach((line) => {
-        if (line.trim().length === 0) return;
-        controller.enqueue(encoder.encode(`data: ${line}\n\n`));
-      });
-      controller.close();
-    },
-  });
-
-  logInteraction({
-    projectId: meta.projectId,
-    userId: meta.userId,
-    role: meta.role,
-    prompt: meta.prompt,
-    retrievedSources: meta.sources,
-    answer,
-  });
-
-  return new NextResponse(stream, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/event-stream",
-      Connection: "keep-alive",
-      "Cache-Control": "no-cache, no-transform",
-    },
-  });
 }
 
 export async function POST(request: Request) {
@@ -167,9 +265,9 @@ export async function POST(request: Request) {
   const threadId = await ensureThread(supabase, projectId, user.id);
   await logToDb(supabase, threadId, projectId, user.id, "user", message);
 
-  const { sources: retrievedSources, contextText } = await retrieveContext(projectId, message, {
-    includeGeneralFallback: false,
-  });
+  const { sources: retrievedSources, contextText } = await retrieveContext(projectId, message);
+  const signedSources = withSources ? await signSources(supabase, retrievedSources) : [];
+  const usedChunkIds = retrievedSources.map((s) => s.id).filter((id) => UUID_RE.test(id));
 
   const userPrompt = buildUserPrompt({
     message,
@@ -184,25 +282,47 @@ export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
   const chatModel = process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini";
 
-  if (!apiKey) {
-    const synthetic = [
-      "Konklusjon: Kan ikke kontakte modellen (mangler OPENAI_API_KEY). Viser forel\u00f8pig vurdering basert p\u00e5 lokale kilder.",
-      `Basis / Kilder: ${
-        retrievedSources.length
-          ? retrievedSources.map((s, i) => `[Kilde ${i + 1}] ${s.title} (${s.reference})`).join("; ")
-          : "Ingen kilder funnet i prosjektet."
-      }`,
-      "Anbefalinger: Oppgi API-n\u00f8kkel eller legg til prosjektkilder (IFC/PDF/krav) for RAG-svar.",
-      "Forutsetninger & antakelser: Ingen modellrespons. Kun statisk regelverk/brukerinput lest.",
-    ].join("\n");
+  const missingSourcesFallback: MissingSource[] = retrievedSources.length
+    ? []
+    : [
+        { type: "ifc", description: "Last opp IFC-modell for mengder/objekter/soner." },
+        { type: "pdf", description: "Last opp relevante PDF-krav og beskrivelse." },
+        { type: "schedule", description: "Last opp fremdriftsplan (XLSX/CSV)." },
+      ];
 
-    await logToDb(supabase, threadId, projectId, user.id, "assistant", synthetic, retrievedSources);
-    return streamSyntheticAnswer(synthetic, { projectId, prompt: message, role, sources: retrievedSources, userId: user.id });
+  if (!apiKey) {
+    const fallback: ChatEnvelope = {
+      conclusion: "Kan ikke kontakte modellen (mangler OPENAI_API_KEY).",
+      basis: retrievedSources.length
+        ? "Svar basert p\u00e5 tilgjengelige prosjektkilder."
+        : "Ingen prosjektkilder funnet.",
+      recommendations: [
+        "Legg inn API-n\u00f8kkel.",
+        "Last opp prosjektkilder (IFC/PDF/krav) for RAG-svar.",
+      ],
+      assumptions: ["Ingen modellrespons tilgjengelig."],
+      draft_actions: [],
+      missing_sources: missingSourcesFallback,
+      sources: signedSources,
+    };
+
+    const rawText = JSON.stringify(fallback);
+    await logToDb(supabase, threadId, projectId, user.id, "assistant", rawText, signedSources, signedSources, usedChunkIds);
+    logInteraction({
+      projectId,
+      userId: user.id,
+      role,
+      prompt: message,
+      retrievedSources,
+      answer: rawText,
+    });
+
+    return NextResponse.json({ ok: false, error: "MISSING_OPENAI_KEY", response: fallback }, { status: 500 });
   }
 
   const openAiPayload = {
     model: chatModel,
-    stream: true,
+    response_format: { type: "json_object" as const },
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userPrompt },
@@ -220,90 +340,76 @@ export async function POST(request: Request) {
       body: JSON.stringify(openAiPayload),
     });
   } catch (err: any) {
-    const synthetic = [
-      "Konklusjon: Klarte ikke \u00e5 n\u00e5 OpenAI-endepunktet.",
-      `Basis / Kilder: ${
-        retrievedSources.length
-          ? retrievedSources.map((s, i) => `[Kilde ${i + 1}] ${s.title} (${s.reference})`).join("; ")
-          : "Ingen kilder funnet i prosjektet."
-      }`,
-      `Anbefalinger: Sjekk nettverk og API-n\u00f8kkel. Feil: ${err?.message ?? "ukjent"}`,
-      "Forutsetninger & antakelser: Ingen modellrespons.",
-    ].join("\n");
-    await logToDb(supabase, threadId, projectId, user.id, "assistant", synthetic, retrievedSources);
-    return streamSyntheticAnswer(synthetic, { projectId, prompt: message, role, sources: retrievedSources, userId: user.id });
+    const fallback: ChatEnvelope = {
+      conclusion: "Klarte ikke \u00e5 n\u00e5 OpenAI-endepunktet.",
+      basis: retrievedSources.length ? "Svar basert p\u00e5 lokale kilder." : "Ingen kilder funnet i prosjektet.",
+      recommendations: [`Sjekk nettverk og API-n\u00f8kkel. Feil: ${err?.message ?? "ukjent"}`],
+      assumptions: ["Ingen modellrespons tilgjengelig."],
+      draft_actions: [],
+      missing_sources: missingSourcesFallback,
+      sources: signedSources,
+    };
+    const rawText = JSON.stringify(fallback);
+    await logToDb(supabase, threadId, projectId, user.id, "assistant", rawText, signedSources, signedSources, usedChunkIds);
+    logInteraction({
+      projectId,
+      userId: user.id,
+      role,
+      prompt: message,
+      retrievedSources,
+      answer: rawText,
+    });
+    return NextResponse.json({ ok: false, error: "OPENAI_UNREACHABLE", response: fallback }, { status: 502 });
   }
 
-  if (!response.ok || !response.body) {
+  if (!response.ok) {
     const text = await response.text();
-    const synthetic = [
-      `Konklusjon: Modellkall feilet (${response.status}).`,
-      `Basis / Kilder: ${
-        retrievedSources.length
-          ? retrievedSources.map((s, i) => `[Kilde ${i + 1}] ${s.title} (${s.reference})`).join("; ")
-          : "Ingen kilder funnet i prosjektet."
-      }`,
-      `Anbefalinger: Sjekk API-n\u00f8kkel/kvote. Respons: ${text || "ingen detaljer."}`,
-      "Forutsetninger & antakelser: Ingen modellrespons.",
-    ].join("\n");
-    await logToDb(supabase, threadId, projectId, user.id, "assistant", synthetic, retrievedSources);
-    return streamSyntheticAnswer(synthetic, { projectId, prompt: message, role, sources: retrievedSources, userId: user.id });
+    const fallback: ChatEnvelope = {
+      conclusion: `Modellkall feilet (${response.status}).`,
+      basis: retrievedSources.length ? "Svar basert p\u00e5 lokale kilder." : "Ingen kilder funnet i prosjektet.",
+      recommendations: [`Sjekk API-n\u00f8kkel/kvote. Respons: ${text || "ingen detaljer."}`],
+      assumptions: ["Ingen modellrespons tilgjengelig."],
+      draft_actions: [],
+      missing_sources: missingSourcesFallback,
+      sources: signedSources,
+    };
+    const rawText = JSON.stringify(fallback);
+    await logToDb(supabase, threadId, projectId, user.id, "assistant", rawText, signedSources, signedSources, usedChunkIds);
+    logInteraction({
+      projectId,
+      userId: user.id,
+      role,
+      prompt: message,
+      retrievedSources,
+      answer: rawText,
+    });
+    return NextResponse.json({ ok: false, error: "OPENAI_FAILED", response: fallback }, { status: 502 });
   }
 
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  let fullAnswer = "";
+  const json = (await response.json().catch(() => ({}))) as any;
+  const rawContent = json?.choices?.[0]?.message?.content || "";
+  const parsed = extractJson(rawContent) || {};
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        controller.enqueue(encoder.encode(`data: SOURCES::${JSON.stringify(retrievedSources)}\n\n`));
-      } catch {
-        // ignore
-      }
+  const envelope: ChatEnvelope = {
+    conclusion: String(parsed.conclusion || parsed.summary || "").trim() || "Ingen konklusjon mottatt.",
+    basis: String(parsed.basis || parsed.sources || "").trim() || "Ingen kilder oppgitt.",
+    recommendations: normalizeStringList(parsed.recommendations),
+    assumptions: normalizeStringList(parsed.assumptions),
+    draft_actions: normalizeDraftActions(parsed.draft_actions),
+    missing_sources: normalizeMissingSources(parsed.missing_sources, missingSourcesFallback),
+    sources: signedSources,
+  };
 
-      const reader = response!.body!.getReader();
-      let buffer = "";
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split("\n\n");
-          buffer = parts.pop() || "";
-
-          for (const part of parts) {
-            if (!part.startsWith("data:")) continue;
-            const chunk = part.replace("data:", "").trim();
-            if (!chunk) continue;
-            fullAnswer += (fullAnswer ? "\n" : "") + chunk;
-            controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
-          }
-        }
-      } catch (err) {
-        console.error("Stream error:", err);
-      } finally {
-        controller.close();
-        await logToDb(supabase, threadId, projectId, user.id, "assistant", fullAnswer || "", retrievedSources);
-        logInteraction({
-          projectId,
-          userId: user.id,
-          role,
-          prompt: message,
-          retrievedSources,
-          answer: fullAnswer || "Ingen svar mottatt fra modell.",
-        });
-      }
-    },
+  const rawText = JSON.stringify(envelope);
+  await logToDb(supabase, threadId, projectId, user.id, "assistant", rawText, signedSources, signedSources, usedChunkIds);
+  logInteraction({
+    projectId,
+    userId: user.id,
+    role,
+    prompt: message,
+    retrievedSources,
+    answer: rawText,
   });
 
-  return new NextResponse(stream, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/event-stream",
-      Connection: "keep-alive",
-      "Cache-Control": "no-cache, no-transform",
-    },
-  });
+  return NextResponse.json({ ok: true, response: envelope }, { status: 200 });
 }
