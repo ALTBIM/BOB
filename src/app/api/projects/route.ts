@@ -62,15 +62,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: projectError?.message || "Kunne ikke opprette prosjekt." }, { status: 500 });
   }
 
-  const permissions = [
-    "read",
-    "write",
-    "delete",
-    "manage_users",
-    "manage_models",
-    "generate_lists",
-    "run_controls",
-  ];
+  const permissions = ["read", "write", "delete", "manage_users", "manage_models", "generate_lists", "run_controls"];
 
   const memberPayload = {
     project_id: project.id,
@@ -81,7 +73,22 @@ export async function POST(request: Request) {
     created_at: new Date().toISOString(),
   };
 
-  const { error: memberError } = await supabase.from("project_members").insert(memberPayload);
+  const insertMember = async () => {
+    const { error } = await supabase.from("project_members").insert(memberPayload);
+    if (!error) return null;
+    if (error.code === "PGRST204") {
+      const minimalPayload = {
+        project_id: project.id,
+        user_id: user.id,
+        role: "byggherre",
+      };
+      const { error: minimalError } = await supabase.from("project_members").insert(minimalPayload);
+      return minimalError || null;
+    }
+    return error;
+  };
+
+  const memberError = await insertMember();
   if (memberError) {
     await supabase.from("projects").delete().eq("id", project.id);
     return NextResponse.json({ error: memberError.message }, { status: 500 });

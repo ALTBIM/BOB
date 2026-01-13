@@ -551,75 +551,36 @@ class MockDatabase {
         created_by: projectData.createdBy,
         org_id: projectData.orgId || null,
       };
-      let apiError: string | null = null;
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData.session?.access_token;
-        if (token) {
-          const res = await fetch("/api/projects", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              name: payload.name,
-              description: payload.description,
-              status: payload.status,
-              orgId: payload.org_id,
-            }),
-          });
-          if (res.ok) {
-            const json = await res.json();
-            if (json?.project) {
-              return normalizeProject(json.project, json.member);
-            }
-          } else {
-            const text = await res.text();
-            apiError = text || `API-feil (${res.status})`;
-          }
-        }
-      } catch (err: any) {
-        apiError = err?.message || "Ukjent API-feil";
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        throw new Error("Mangler gyldig sesjon. Logg inn p\u00e5 nytt.");
       }
 
-      const insertProject = async (includeOrg: boolean) => {
-        const body = includeOrg && payload.org_id ? { ...payload } : { ...payload, org_id: undefined };
-        return supabase.from("projects").insert(body).select("*").single();
-      };
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: payload.name,
+          description: payload.description,
+          status: payload.status,
+          orgId: payload.org_id,
+        }),
+      });
 
-      let { data, error } = await insertProject(true);
-      if (error?.code === "PGRST204" && error.message?.includes("org_id")) {
-        ({ data, error } = await insertProject(false));
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `API-feil (${res.status})`);
       }
-      if (error) {
-        const details = apiError ? `${apiError} | ${error.message}` : error.message;
-        throw new Error(details);
+
+      const json = await res.json();
+      if (!json?.project) {
+        throw new Error("Ugyldig svar fra server ved prosjektopprettelse.");
       }
-      if (data) {
-        const permissions: Permission[] = [
-          'read',
-          'write',
-          'delete',
-          'manage_users',
-          'manage_models',
-          'generate_lists',
-          'run_controls'
-        ];
-        const memberRow = {
-          project_id: data.id,
-          user_id: projectData.createdBy,
-          role: 'byggherre' as ProjectRole,
-          access_level: 'admin',
-          permissions,
-          created_at: new Date().toISOString()
-        };
-        const { error: memberErr } = await supabase.from("project_members").insert(memberRow);
-        if (memberErr) {
-          console.warn("Kunne ikke opprette prosjektmedlemskap", memberErr);
-        }
-        return normalizeProject(data, memberRow);
-      }
+      return normalizeProject(json.project, json.member);
     }
 
     const newProject: Project = {
