@@ -27,6 +27,7 @@ type ChatBody = {
   style?: "kort" | "detaljert";
   sources?: boolean;
   memory?: ChatMemory[];
+  stream?: boolean;
 };
 
 type ChatSource = RetrievedSource & { url?: string | null };
@@ -125,6 +126,9 @@ const extractJson = (text: string): Record<string, unknown> | null => {
     return null;
   }
 };
+
+const toSse = (event: string, data: unknown) =>
+  `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 
 async function signSources(
   supabase: ReturnType<typeof getSupabaseServerClient>,
@@ -237,6 +241,7 @@ export async function POST(request: Request) {
   const style = body?.style ?? "kort";
   const withSources = Boolean(body?.sources ?? true);
   const memory = body?.memory ?? [];
+  const wantsStream = body?.stream !== false;
 
   if (!message.trim()) {
     return NextResponse.json({ error: "Melding mangler." }, { status: 400 });
@@ -328,6 +333,149 @@ export async function POST(request: Request) {
       { role: "user", content: userPrompt },
     ],
   };
+
+  if (wantsStream) {
+    const streamPayload = { ...openAiPayload, stream: true };
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        let rawContent = "";
+        let finished = false;
+
+        let openAiResponse: Response;
+        try {
+          openAiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify(streamPayload),
+          });
+        } catch (err: any) {
+          const fallback: ChatEnvelope = {
+            conclusion: "Klarte ikke \u00e5 n\u00e5 OpenAI-endepunktet.",
+            basis: retrievedSources.length ? "Svar basert p\u00e5 lokale kilder." : "Ingen kilder funnet i prosjektet.",
+            recommendations: [`Sjekk nettverk og API-n\u00f8kkel. Feil: ${err?.message ?? "ukjent"}`],
+            assumptions: ["Ingen modellrespons tilgjengelig."],
+            draft_actions: [],
+            missing_sources: missingSourcesFallback,
+            sources: signedSources,
+          };
+          controller.enqueue(encoder.encode(toSse("done", { ok: false, error: "OPENAI_UNREACHABLE", response: fallback })));
+          await logToDb(supabase, threadId, projectId, user.id, "assistant", JSON.stringify(fallback), signedSources, signedSources, usedChunkIds);
+          logInteraction({
+            projectId,
+            userId: user.id,
+            role,
+            prompt: message,
+            retrievedSources,
+            answer: JSON.stringify(fallback),
+          });
+          controller.close();
+          return;
+        }
+
+        if (!openAiResponse.ok || !openAiResponse.body) {
+          const text = await openAiResponse.text().catch(() => "");
+          const fallback: ChatEnvelope = {
+            conclusion: `Modellkall feilet (${openAiResponse.status}).`,
+            basis: retrievedSources.length ? "Svar basert p\u00e5 lokale kilder." : "Ingen kilder funnet i prosjektet.",
+            recommendations: [`Sjekk API-n\u00f8kkel/kvote. Respons: ${text || "ingen detaljer."}`],
+            assumptions: ["Ingen modellrespons tilgjengelig."],
+            draft_actions: [],
+            missing_sources: missingSourcesFallback,
+            sources: signedSources,
+          };
+          controller.enqueue(encoder.encode(toSse("done", { ok: false, error: "OPENAI_FAILED", response: fallback })));
+          await logToDb(supabase, threadId, projectId, user.id, "assistant", JSON.stringify(fallback), signedSources, signedSources, usedChunkIds);
+          logInteraction({
+            projectId,
+            userId: user.id,
+            role,
+            prompt: message,
+            retrievedSources,
+            answer: JSON.stringify(fallback),
+          });
+          controller.close();
+          return;
+        }
+
+        const reader = openAiResponse.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (!finished) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let idx = buffer.indexOf("\n\n");
+          while (idx !== -1) {
+            const chunk = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+            const lines = chunk.split("\n");
+            let data = "";
+            for (const line of lines) {
+              if (line.startsWith("data:")) {
+                data += line.slice(5).trim();
+              }
+            }
+            if (!data) {
+              idx = buffer.indexOf("\n\n");
+              continue;
+            }
+            if (data === "[DONE]") {
+              finished = true;
+              break;
+            }
+            try {
+              const payload = JSON.parse(data) as any;
+              const delta = payload?.choices?.[0]?.delta?.content ?? "";
+              if (delta) {
+                rawContent += delta;
+                controller.enqueue(encoder.encode(toSse("delta", { text: delta })));
+              }
+            } catch {
+              // ignore malformed chunks
+            }
+            idx = buffer.indexOf("\n\n");
+          }
+        }
+
+        const parsed = extractJson(rawContent) || {};
+        const envelope: ChatEnvelope = {
+          conclusion: String(parsed.conclusion || parsed.summary || "").trim() || "Ingen konklusjon mottatt.",
+          basis: String(parsed.basis || parsed.sources || "").trim() || "Ingen kilder oppgitt.",
+          recommendations: normalizeStringList(parsed.recommendations),
+          assumptions: normalizeStringList(parsed.assumptions),
+          draft_actions: normalizeDraftActions(parsed.draft_actions),
+          missing_sources: normalizeMissingSources(parsed.missing_sources, missingSourcesFallback),
+          sources: signedSources,
+        };
+
+        const rawText = JSON.stringify(envelope);
+        controller.enqueue(encoder.encode(toSse("done", { ok: true, response: envelope })));
+        await logToDb(supabase, threadId, projectId, user.id, "assistant", rawText, signedSources, signedSources, usedChunkIds);
+        logInteraction({
+          projectId,
+          userId: user.id,
+          role,
+          prompt: message,
+          retrievedSources,
+          answer: rawText,
+        });
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
+    });
+  }
 
   let response: Response;
   try {

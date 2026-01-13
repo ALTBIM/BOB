@@ -95,6 +95,68 @@ function saveToStorage<T>(key: string, value: T) {
   }
 }
 
+type StreamDonePayload = {
+  ok?: boolean;
+  response?: ChatResponse;
+  error?: string;
+};
+
+async function readEventStream(
+  response: Response,
+  handlers: {
+    onDelta: (text: string) => void;
+    onDone: (payload: StreamDonePayload) => void;
+    onError: (message: string) => void;
+  }
+) {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("Ingen stream-respons fra server.");
+  }
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx = buffer.indexOf("\n\n");
+    while (idx !== -1) {
+      const chunk = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      const lines = chunk.split("\n");
+      let event = "message";
+      const dataLines: string[] = [];
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          event = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).trim());
+        }
+      }
+      if (!dataLines.length) {
+        idx = buffer.indexOf("\n\n");
+        continue;
+      }
+      const raw = dataLines.join("");
+      let payload: any = raw;
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        // ignore
+      }
+      if (event === "delta") {
+        handlers.onDelta(String(payload?.text || ""));
+      } else if (event === "done") {
+        handlers.onDone(payload || {});
+      } else if (event === "error") {
+        handlers.onError(String(payload?.error || "Ukjent feil."));
+      }
+      idx = buffer.indexOf("\n\n");
+    }
+  }
+}
+
 const defaultConversations: Conversation[] = [{ id: "1", title: "Kravkontroll - TEK17", updatedAt: "12:03" }];
 
 const defaultMessages: Record<string, ChatMessage[]> = {
@@ -223,54 +285,93 @@ export default function ChatPage() {
       ],
     }));
 
+    const conversationId = activeConversationId;
+    const updateBotMessage = (patch: Partial<ChatMessage>) => {
+      setMessagesByConversation((prev) => ({
+        ...prev,
+        [conversationId]: (prev[conversationId] || []).map((m) => (m.id === botMsgId ? { ...m, ...patch } : m)),
+      }));
+    };
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({
           message: text,
           projectId: activeProjectId,
           style: styleMode,
           sources: withSources,
           memory: memoryItems,
+          stream: true,
         }),
       });
 
-      const data = (await response.json().catch(() => ({}))) as { response?: ChatResponse; error?: string };
-      if (!response.ok) {
-        setChatError(data?.error || `Chat API feilet (${response.status}).`);
-      }
-      if (!data?.response) {
-        throw new Error(data?.error || "Ingen gyldig respons fra server.");
+      const isEventStream = response.headers.get("content-type")?.includes("text/event-stream");
+      if (!isEventStream) {
+        const data = (await response.json().catch(() => ({}))) as { response?: ChatResponse; error?: string };
+        if (!response.ok) {
+          setChatError(data?.error || `Chat API feilet (${response.status}).`);
+        }
+        if (!data?.response) {
+          throw new Error(data?.error || "Ingen gyldig respons fra server.");
+        }
+
+        const payload = data.response;
+        updateBotMessage({
+          content: payload.conclusion || "Ingen konklusjon mottatt.",
+          timestamp: nowTime(),
+          response: {
+            ...payload,
+            recommendations: normalizeList(payload.recommendations),
+            assumptions: normalizeList(payload.assumptions),
+          },
+        });
+        return;
       }
 
-      const payload = data.response;
-      setMessagesByConversation((prev) => ({
-        ...prev,
-        [activeConversationId]: (prev[activeConversationId] || []).map((m) =>
-          m.id === botMsgId
-            ? {
-                ...m,
-                content: payload.conclusion || "Ingen konklusjon mottatt.",
-                timestamp: nowTime(),
-                response: {
-                  ...payload,
-                  recommendations: normalizeList(payload.recommendations),
-                  assumptions: normalizeList(payload.assumptions),
-                },
-              }
-            : m
-        ),
-      }));
+      let streamedText = "";
+      await readEventStream(response, {
+        onDelta: (delta) => {
+          if (!delta) return;
+          streamedText += delta;
+          updateBotMessage({ content: streamedText });
+        },
+        onDone: (payload) => {
+          if (!payload?.response) {
+            if (payload?.error) {
+              setChatError(payload.error);
+            }
+            updateBotMessage({
+              content: streamedText || "Ingen konklusjon mottatt.",
+              timestamp: nowTime(),
+            });
+            return;
+          }
+          const normalized = {
+            ...payload.response,
+            recommendations: normalizeList(payload.response.recommendations),
+            assumptions: normalizeList(payload.response.assumptions),
+          };
+          updateBotMessage({
+            content: normalized.conclusion || "Ingen konklusjon mottatt.",
+            timestamp: nowTime(),
+            response: normalized,
+          });
+        },
+        onError: (message) => {
+          setChatError(message);
+        },
+      });
     } catch (err: any) {
-      setMessagesByConversation((prev) => ({
-        ...prev,
-        [activeConversationId]: (prev[activeConversationId] || []).map((m) =>
-          m.id === botMsgId
-            ? { ...m, content: `Kunne ikke hente svar n\u00e5. ${err?.message || "Ukjent feil."}`, timestamp: nowTime() }
-            : m
-        ),
-      }));
+      updateBotMessage({
+        content: `Kunne ikke hente svar n\u00e5. ${err?.message || "Ukjent feil."}`,
+        timestamp: nowTime(),
+      });
     } finally {
       setIsSending(false);
     }
