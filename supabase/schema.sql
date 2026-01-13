@@ -411,6 +411,15 @@ create or replace view public.user_project_memberships as
 select pm.project_id, pm.user_id
 from public.project_members pm;
 
+-- Drop helper functions to avoid parameter-name conflicts (safe to re-run)
+drop function if exists public.create_project_with_member(text, text, uuid, uuid) cascade;
+drop function if exists public.create_project_with_member(text, text, uuid, uuid, text, text, text, text, integer) cascade;
+drop function if exists public.is_app_admin(uuid) cascade;
+drop function if exists public.is_org_admin(uuid, uuid) cascade;
+drop function if exists public.can_project_read(uuid, uuid) cascade;
+drop function if exists public.can_project_write(uuid, uuid) cascade;
+drop function if exists public.can_project_admin(uuid, uuid) cascade;
+
 -- Admin helper functions
 create or replace function public.is_app_admin(uid uuid)
 returns boolean
@@ -512,6 +521,49 @@ as $$
       select 1 from public.projects p
       where p.id = pid and p.created_by = uid
     );
+$$;
+
+-- Atomic project creation (project + creator membership)
+create or replace function public.create_project_with_member(
+  p_name text,
+  p_description text,
+  p_created_by uuid,
+  p_org_id uuid default null,
+  p_status text default 'active',
+  p_client text default null,
+  p_location text default null,
+  p_type text default 'commercial',
+  p_progress int default 0
+)
+returns table(project jsonb, member jsonb)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_project public.projects%rowtype;
+  v_member public.project_members%rowtype;
+begin
+  insert into public.projects (name, description, created_by, org_id, status, client, location, type, progress)
+  values (
+    p_name,
+    nullif(p_description, ''),
+    p_created_by,
+    p_org_id,
+    coalesce(p_status, 'active'),
+    nullif(p_client, ''),
+    nullif(p_location, ''),
+    coalesce(p_type, 'commercial'),
+    coalesce(p_progress, 0)
+  )
+  returning * into v_project;
+
+  insert into public.project_members (project_id, user_id, role, access_level, permissions)
+  values (v_project.id, p_created_by, 'byggherre', 'admin', '{}'::text[])
+  returning * into v_member;
+
+  return query select to_jsonb(v_project), to_jsonb(v_member);
+end;
 $$;
 
 -- Admin policies
@@ -892,4 +944,5 @@ using (public.can_project_write(auth.uid(), project_schedule_tasks.project_id));
 create policy "project_schedule_tasks_delete" on public.project_schedule_tasks for delete
 using (public.can_project_write(auth.uid(), project_schedule_tasks.project_id));
 
-
+-- Refresh PostgREST schema cache (optional but helpful after migrations)
+select pg_notify('pgrst', 'reload schema');

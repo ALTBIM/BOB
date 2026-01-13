@@ -53,6 +53,11 @@ export function ActiveProjectProvider({ children }: { children: React.ReactNode 
       const storedValid = stored && list.some((p) => p.id === stored);
       const nextId = currentValid ? activeProjectId : storedValid ? stored! : list[0]?.id || "";
       setActiveProjectId(nextId);
+    } catch (error) {
+      console.error("Kunne ikke hente prosjekter/admin-kontekst", error);
+      setProjects([]);
+      setAdminContext({ isPlatformAdmin: false, orgMemberships: [], organizations: [] });
+      setActiveProjectId("");
     } finally {
       setLoading(false);
     }

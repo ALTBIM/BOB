@@ -123,7 +123,8 @@ export default function ProjectManagement({ selectedProject, onProjectSelect }: 
       setIsCreateOpen(false);
       onProjectSelect?.(project.id);
     } catch (error) {
-      setCreateError("Kunne ikke opprette prosjekt. Pr\u00f8v igjen.");
+      const message = error instanceof Error ? error.message : "Kunne ikke opprette prosjekt. Pr\u00f8v igjen.";
+      setCreateError(message);
       console.error('Failed to create project:', error);
     }
   };

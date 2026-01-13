@@ -94,6 +94,16 @@ export type OrgRole = 'member' | 'org_admin';
 export type Permission = 'read' | 'write' | 'delete' | 'manage_users' | 'manage_models' | 'generate_lists' | 'run_controls';
 export type ModelStatus = 'uploading' | 'processing' | 'completed' | 'error';
 
+type ProjectApiEnvelope = {
+  project: Record<string, unknown>;
+  membership?: {
+    role?: ProjectRole;
+    access_level?: AccessLevel;
+    permissions?: Permission[];
+    created_at?: string | null;
+  };
+};
+
 const normalizeProject = (row: any, member?: any): Project => {
   const createdAt = row?.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString();
   const status = (row?.status as ProjectStatus) || 'active';
@@ -417,124 +427,55 @@ class MockDatabase {
     if (!supabase) {
       return { isPlatformAdmin: false, orgMemberships: [], organizations: [] };
     }
-
-    const [{ data: adminRow }, { data: orgRows }] = await Promise.all([
-      supabase.from("app_admins").select("user_id").eq("user_id", userId).maybeSingle(),
-      supabase
-        .from("organization_members")
-        .select("org_id, org_role, org:organizations(name)")
-        .eq("user_id", userId),
-    ]);
-
-    const isPlatformAdmin = !!adminRow;
-    const orgMemberships: OrgMembership[] = (orgRows || []).map((row: any) => ({
-      orgId: row.org_id,
-      orgRole: (row.org_role as OrgRole) || "member",
-      orgName: row.org?.name || undefined,
-    }));
-
-    if (isPlatformAdmin) {
-      const { data: orgList } = await supabase
-        .from("organizations")
-        .select("id, name, created_at, created_by")
-        .order("created_at", { ascending: false });
-      const organizations: Organization[] = (orgList || []).map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-        createdBy: row.created_by || undefined,
-      }));
-      return { isPlatformAdmin, orgMemberships, organizations };
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) {
+      return { isPlatformAdmin: false, orgMemberships: [], organizations: [] };
     }
 
-    const organizations: Organization[] = orgMemberships.map((membership) => ({
-      id: membership.orgId,
-      name: membership.orgName || "Ukjent organisasjon",
-      createdAt: new Date().toISOString(),
-      createdBy: undefined,
-    }));
-
-    return { isPlatformAdmin, orgMemberships, organizations };
+    const res = await fetch("/api/admin/context", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      console.warn("Admin context feilet", res.status);
+      return { isPlatformAdmin: false, orgMemberships: [], organizations: [] };
+    }
+    const payload = (await res.json().catch(() => null)) as AdminContext | null;
+    if (!payload) {
+      return { isPlatformAdmin: false, orgMemberships: [], organizations: [] };
+    }
+    return payload;
   }
 
   async getProjectsForUser(userId: string): Promise<Project[]> {
     const supabase = getSupabaseBrowserClient();
     if (supabase) {
-      const adminContext = await this.getAdminContext(userId);
-      const orgAdminOrgIds = adminContext.orgMemberships
-        .filter((m) => m.orgRole === "org_admin")
-        .map((m) => m.orgId);
-
-      if (adminContext.isPlatformAdmin) {
-        const { data, error } = await supabase.from("projects").select("*").order("created_at", { ascending: false });
-        if (!error && data) {
-          return data.map((row: any) =>
-            normalizeProject(row, {
-              user_id: userId,
-              role: "plattform_admin",
-              access_level: "admin",
-              permissions: [],
-            })
-          );
-        }
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        return [];
       }
 
-      const orgProjectsQuery = orgAdminOrgIds.length
-        ? supabase.from("projects").select("*").in("org_id", orgAdminOrgIds)
-        : Promise.resolve({ data: [], error: null } as any);
-
-      const [{ data: memberRows }, { data: createdRows }, { data: orgRows }] = await Promise.all([
-        supabase
-          .from("project_members")
-          .select("role, access_level, permissions, created_at, project:projects(*)")
-          .eq("user_id", userId),
-        supabase.from("projects").select("*").eq("created_by", userId),
-        orgProjectsQuery,
-      ]);
-
-      const byId = new Map<string, Project>();
-      if (memberRows) {
-        memberRows.forEach((row: any) => {
-          if (!row.project) return;
-          const orgOverride = row.project.org_id && orgAdminOrgIds.includes(row.project.org_id);
-          const access_level = orgOverride ? "admin" : row.access_level;
-          byId.set(
-            row.project.id,
-            normalizeProject(row.project, { ...row, user_id: userId, access_level })
-          );
-        });
-      }
-      if (orgRows) {
-        orgRows.forEach((row: any) => {
-          if (!byId.has(row.id)) {
-            byId.set(
-              row.id,
-              normalizeProject(row, {
-                user_id: userId,
-                role: "org_admin",
-                access_level: "admin",
-                permissions: [],
-              })
-            );
-          }
-        });
-      }
-      if (createdRows) {
-        createdRows.forEach((row: any) => {
-          if (!byId.has(row.id)) {
-            byId.set(
-              row.id,
-              normalizeProject(row, {
-                user_id: userId,
-                role: "byggherre",
-                access_level: "admin",
-                permissions: [],
-              })
-            );
-          }
-        });
-      }
-      return Array.from(byId.values());
+    const res = await fetch("/api/projects", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      console.warn("Prosjektliste feilet", res.status);
+      return [];
+    }
+      const payload = (await res.json().catch(() => null)) as { projects?: ProjectApiEnvelope[] } | null;
+      const items = payload?.projects || [];
+      return items
+        .map((item) =>
+          normalizeProject(item.project, {
+            user_id: userId,
+            role: item.membership?.role || "byggherre",
+            access_level: item.membership?.access_level || "read",
+            permissions: item.membership?.permissions || [],
+            created_at: item.membership?.created_at || null,
+          })
+        )
+        .filter((project) => project.id);
     }
     return this.projects.filter(project => 
       project.teamMembers.some(member => member.userId === userId)
@@ -567,16 +508,21 @@ class MockDatabase {
           name: payload.name,
           description: payload.description,
           status: payload.status,
+          client: projectData.client || null,
+          location: projectData.location || null,
+          type: projectData.type || null,
+          progress: projectData.progress ?? 0,
           orgId: payload.org_id,
         }),
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `API-feil (${res.status})`);
+        const payload = await res.json().catch(() => null);
+        const message = payload?.error || payload?.message || `API-feil (${res.status})`;
+        throw new Error(message);
       }
 
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
       if (!json?.project) {
         throw new Error("Ugyldig svar fra server ved prosjektopprettelse.");
       }

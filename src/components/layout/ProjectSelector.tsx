@@ -99,7 +99,8 @@ export default function ProjectSelector() {
       setCreateOpen(false);
     } catch (err) {
       console.error("Kunne ikke opprette prosjekt", err);
-      setCreateError("Kunne ikke opprette prosjekt. Pr\u00f8v igjen.");
+      const message = err instanceof Error ? err.message : "Kunne ikke opprette prosjekt. Pr\u00f8v igjen.";
+      setCreateError(message);
     } finally {
       setIsCreating(false);
     }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { getAuthUser, requireOrgAdmin } from "@/lib/supabase-auth";
+import { getAuthUser, isAppAdmin, requireOrgAdmin } from "@/lib/supabase-auth";
 
 export const runtime = "nodejs";
 
@@ -14,6 +14,96 @@ type Body = {
   progress?: number;
   orgId?: string | null;
 };
+
+type ProjectRow = Record<string, unknown>;
+
+type ProjectEnvelope = {
+  project: ProjectRow;
+  membership?: {
+    role: string;
+    access_level: "read" | "write" | "admin";
+    permissions: string[];
+    created_at?: string;
+  };
+};
+
+export async function GET(request: Request) {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json({ error: "Supabase ikke konfigurert." }, { status: 500 });
+  }
+
+  const { user, error: authError } = await getAuthUser(request);
+  if (!user) {
+    return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
+  }
+
+  const isPlatformAdmin = await isAppAdmin(supabase, user.id);
+  if (isPlatformAdmin) {
+    const { data, error } = await supabase.from("projects").select("*").order("created_at", { ascending: false });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    const projects = (data || []).map((row) => ({
+      project: row,
+      membership: { role: "plattform_admin", access_level: "admin", permissions: [] },
+    }));
+    return NextResponse.json({ projects, isPlatformAdmin: true });
+  }
+
+  const { data: orgMemberships } = await supabase
+    .from("organization_members")
+    .select("org_id, org_role")
+    .eq("user_id", user.id);
+  const orgAdminOrgIds = (orgMemberships || [])
+    .filter((m: any) => m.org_role === "org_admin")
+    .map((m: any) => m.org_id as string);
+
+  const orgProjectsQuery = orgAdminOrgIds.length
+    ? supabase.from("projects").select("*").in("org_id", orgAdminOrgIds)
+    : Promise.resolve({ data: [], error: null } as any);
+
+  const [{ data: memberRows, error: memberError }, { data: orgProjects, error: orgError }] = await Promise.all([
+    supabase
+      .from("project_members")
+      .select("role, access_level, permissions, created_at, project:projects(*)")
+      .eq("user_id", user.id),
+    orgProjectsQuery,
+  ]);
+
+  if (memberError) {
+    return NextResponse.json({ error: memberError.message }, { status: 500 });
+  }
+  if (orgError) {
+    return NextResponse.json({ error: orgError.message }, { status: 500 });
+  }
+
+  const byId = new Map<string, ProjectEnvelope>();
+  (memberRows || []).forEach((row: any) => {
+    if (!row.project) return;
+    byId.set(row.project.id, {
+      project: row.project,
+      membership: {
+        role: row.role || "byggherre",
+        access_level: row.access_level || "read",
+        permissions: row.permissions || [],
+        created_at: row.created_at,
+      },
+    });
+  });
+
+  (orgProjects || []).forEach((row: any) => {
+    if (!byId.has(row.id)) {
+      byId.set(row.id, {
+        project: row,
+        membership: { role: "org_admin", access_level: "admin", permissions: [] },
+      });
+    }
+  });
+
+  const projects = Array.from(byId.values());
+  return NextResponse.json({ projects, isPlatformAdmin: false });
+}
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as Partial<Body>;
@@ -33,13 +123,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: authError || "Ikke autentisert." }, { status: 401 });
   }
 
-  const payload = {
-    name,
-    description: body.description || null,
-    status: body.status || "planning",
-    created_by: user.id,
-  };
-
   const orgId = body.orgId || null;
   if (orgId) {
     const access = await requireOrgAdmin(supabase, orgId, user.id);
@@ -48,51 +131,22 @@ export async function POST(request: Request) {
     }
   }
 
-  const insertProject = async (includeOrg: boolean) => {
-    const bodyPayload = includeOrg && orgId ? { ...payload, org_id: orgId } : payload;
-    return supabase.from("projects").insert(bodyPayload).select("*").single();
-  };
+  const { data, error } = await supabase.rpc("create_project_with_member", {
+    p_name: name,
+    p_description: body.description || null,
+    p_created_by: user.id,
+    p_org_id: orgId,
+    p_status: body.status || null,
+    p_client: body.client || null,
+    p_location: body.location || null,
+    p_type: body.type || null,
+    p_progress: typeof body.progress === "number" ? body.progress : 0,
+  });
 
-  let { data: project, error: projectError } = await insertProject(true);
-  if (projectError?.code === "PGRST204" && projectError.message?.includes("org_id")) {
-    ({ data: project, error: projectError } = await insertProject(false));
+  if (error || !data || data.length === 0) {
+    return NextResponse.json({ error: error?.message || "Kunne ikke opprette prosjekt." }, { status: 500 });
   }
 
-  if (projectError || !project) {
-    return NextResponse.json({ error: projectError?.message || "Kunne ikke opprette prosjekt." }, { status: 500 });
-  }
-
-  const permissions = ["read", "write", "delete", "manage_users", "manage_models", "generate_lists", "run_controls"];
-
-  const memberPayload = {
-    project_id: project.id,
-    user_id: user.id,
-    role: "byggherre",
-    access_level: "admin",
-    permissions,
-    created_at: new Date().toISOString(),
-  };
-
-  const insertMember = async () => {
-    const { error } = await supabase.from("project_members").insert(memberPayload);
-    if (!error) return null;
-    if (error.code === "PGRST204") {
-      const minimalPayload = {
-        project_id: project.id,
-        user_id: user.id,
-        role: "byggherre",
-      };
-      const { error: minimalError } = await supabase.from("project_members").insert(minimalPayload);
-      return minimalError || null;
-    }
-    return error;
-  };
-
-  const memberError = await insertMember();
-  if (memberError) {
-    await supabase.from("projects").delete().eq("id", project.id);
-    return NextResponse.json({ error: memberError.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ project, member: memberPayload });
+  const row = data[0] as { project?: ProjectRow; member?: ProjectRow };
+  return NextResponse.json({ project: row.project || null, member: row.member || null });
 }
