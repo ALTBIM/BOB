@@ -1,0 +1,7 @@
+{
+  "folders": [
+    { "path": "." },
+    { "path": "../_external-repos/bobchatt" },
+    { "path": "../_external-repos/BOB-ifc-viewer" }
+  ]
+}

@@ -9,20 +9,43 @@ const EMBED_DIM = Number(
     (OPENAI_EMBED_MODEL === "text-embedding-3-large" ? "3072" : "1536")
 );
 
-const chunkText = (text: string, maxChars = 1500, overlap = 200) => {
+const chunkTextByTokens = (text: string, targetTokens = 1000, overlapTokens = 175) => {
+  // Best-effort token approximation using words as proxy
   const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean) return [];
+  const words = clean.split(" ").filter(Boolean);
   const chunks: string[] = [];
-  if (!clean) return chunks;
-  for (let i = 0; i < clean.length; i += maxChars - overlap) {
-    chunks.push(clean.slice(i, i + maxChars));
+  const target = Math.max(900, Math.min(1200, targetTokens));
+  const overlap = Math.max(150, Math.min(200, overlapTokens));
+  // treat tokens ~= words (best effort)
+  let i = 0;
+  while (i < words.length) {
+    const end = Math.min(words.length, i + target);
+    const slice = words.slice(i, end).join(" ");
+    chunks.push(slice);
+    if (end >= words.length) break;
+    i = end - overlap; // overlap in words
+    if (i < 0) i = 0;
   }
   return chunks;
+};
+
+// Helper to chunk with page awareness
+const chunkPages = (pages: Array<{ text: string; page?: number | null; section?: string | null }>) => {
+  const out: Array<{ content: string; source_page?: number | null; source_section?: string | null }> = [];
+  for (const p of pages) {
+    const pageChunks = chunkTextByTokens(p.text);
+    for (let i = 0; i < pageChunks.length; i += 1) {
+      out.push({ content: pageChunks[i], source_page: p.page ?? null, source_section: p.section ?? null });
+    }
+  }
+  return out;
 };
 
 const toSqlVector = (embedding: number[]) => `[${embedding.join(",")}]`;
 
 const embedTexts = async (texts: string[]) => {
-  if (!OPENAI_API_KEY) return null;
+  if (!OPENAI_API_KEY) throw new Error("MISSING_OPENAI_KEY");
   const response = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
     headers: {
@@ -36,10 +59,16 @@ const embedTexts = async (texts: string[]) => {
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Embedding feilet: ${response.status} ${text}`);
+    throw new Error(`Embedding failed: ${response.status} ${text}`);
   }
   const json = await response.json();
-  return (json?.data || []).map((d: any) => d.embedding as number[]);
+  const embeddings = (json?.data || []).map((d: any) => d.embedding as number[]);
+  // fail-fast if any embedding has wrong dim
+  const bad = embeddings.find((e) => !e || e.length !== EMBED_DIM);
+  if (bad) {
+    throw new Error(`Embedding dim mismatch: found ${bad?.length ?? 0}, expected ${EMBED_DIM}`);
+  }
+  return embeddings;
 };
 
 export type IngestTextParams = {
@@ -54,47 +83,62 @@ export type IngestTextParams = {
   userId: string;
 };
 
-export async function ingestTextDocument(params: IngestTextParams) {
+export async function ingestTextDocument(params: IngestTextParams & { pages?: Array<{ text: string; page?: number | null; section?: string | null }> }) {
   const pool = await getPgPool();
   const client = await pool.connect();
-  const jobId = uuidv4();
+  const jobId = (params as any).jobId || uuidv4();
   const documentId = uuidv4();
-  const warnings: Array<{ code: string; message: string }> = [];
+  const warnings: Array<{ code: string; message: string; severity?: string; meta?: any }> = [];
 
-  const chunks = chunkText(params.text);
-  let embeddings: number[][] | null = null;
-  if (!OPENAI_API_KEY) {
-    warnings.push({
-      code: "missing_openai_key",
-      message: "OPENAI_API_KEY mangler. Dokumentet er lagret uten embeddings.",
-    });
+  // If pages provided, chunk per page, else chunk whole text
+  let rawChunks: Array<{ content: string; source_page?: number | null; source_section?: string | null }> = [];
+  if (params.pages && params.pages.length > 0) {
+    rawChunks = chunkPages(params.pages);
+  } else {
+    const pageLike = [{ text: params.text, page: null as number | null }];
+    rawChunks = chunkPages(pageLike);
   }
+
+  let embeddings: number[][] | null = null;
   try {
-    embeddings = await embedTexts(chunks);
-    if (embeddings && embeddings.some((embedding) => embedding?.length !== EMBED_DIM)) {
-      const bad = embeddings.find((embedding) => embedding?.length !== EMBED_DIM);
-      warnings.push({
-        code: "embedding_dim_mismatch",
-        message: `Embedding-dimensjon ${bad?.length ?? "ukjent"} matcher ikke forventet ${EMBED_DIM}.`,
-      });
-      embeddings = null;
-    }
+    embeddings = await embedTexts(rawChunks.map((c) => c.content));
   } catch (err: any) {
-    warnings.push({ code: "embedding_failed", message: err?.message || "Kunne ikke hente embeddings" });
-    embeddings = null;
+    // Fail fast on embedding issues
+    warnings.push({ code: "embedding_failed", message: err?.message || "Embedding failed", severity: "error" });
+    // Persist job as failed and record warning
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO ingest_jobs (id, project_id, file_id, job_type, status, started_at, created_by)
+         VALUES ($1, $2, $3, $4, $5, now(), $6)`,
+        [jobId, params.projectId, params.fileId || null, params.sourceType || null, "failed", params.userId]
+      );
+      await client.query(
+        `INSERT INTO ingest_warnings (project_id, file_id, ingest_job_id, severity, code, message, meta)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [params.projectId, params.fileId || null, jobId, "error", "embedding_failed", err?.message || "", null]
+      );
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+    } finally {
+      client.release();
+    }
+    throw err;
   }
 
   try {
     await client.query("BEGIN");
 
+    // Create job as running (we create queued earlier in higher-level caller if desired)
     await client.query(
-      `INSERT INTO ingest_jobs (id, project_id, file_id, status, started_at, created_by)
-       VALUES ($1, $2, $3, $4, now(), $5)`,
-      [jobId, params.projectId, params.fileId || null, "running", params.userId]
+      `INSERT INTO ingest_jobs (id, project_id, file_id, job_type, status, started_at, created_by)
+       VALUES ($1, $2, $3, $4, $5, now(), $6)`,
+      [jobId, params.projectId, params.fileId || null, params.sourceType || null, "running", params.userId]
     );
 
     await client.query(
-      `INSERT INTO documents (id, project_id, file_id, title, discipline, reference, source_path, source_type, created_by)
+      `INSERT INTO documents (id, project_id, file_id, title, discipline, reference, storage_path, source_type, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         documentId,
@@ -109,8 +153,8 @@ export async function ingestTextDocument(params: IngestTextParams) {
       ]
     );
 
-    for (let i = 0; i < chunks.length; i += 1) {
-      const content = chunks[i];
+    for (let i = 0; i < rawChunks.length; i += 1) {
+      const content = rawChunks[i].content;
       const embedding = embeddings ? embeddings[i] : null;
       const tokenCount = content.split(/\s+/).filter(Boolean).length;
       const chunkId = uuidv4();
@@ -125,14 +169,14 @@ export async function ingestTextDocument(params: IngestTextParams) {
           content,
           tokenCount,
           embedding ? toSqlVector(embedding) : null,
-          null,
-          null,
+          rawChunks[i].source_page ?? null,
+          rawChunks[i].source_section ?? null,
         ]
       );
 
       await client.query(
-        `INSERT INTO sources (project_id, document_id, chunk_id, title, reference, discipline, snippet, source_path)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO sources (project_id, document_id, chunk_id, title, reference, discipline, snippet, source_path, source_page)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           params.projectId,
           documentId,
@@ -142,25 +186,26 @@ export async function ingestTextDocument(params: IngestTextParams) {
           params.discipline || null,
           content.slice(0, 240),
           params.sourcePath || null,
+          rawChunks[i].source_page ?? null,
         ]
       );
     }
 
     for (const warning of warnings) {
       await client.query(
-        `INSERT INTO ingest_warnings (project_id, file_id, ingest_job_id, code, message)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [params.projectId, params.fileId || null, jobId, warning.code, warning.message]
+        `INSERT INTO ingest_warnings (project_id, file_id, ingest_job_id, severity, code, message, meta)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [params.projectId, params.fileId || null, jobId, warning.severity || "warn", warning.code, warning.message, warning.meta || null]
       );
     }
 
     await client.query(
       `UPDATE ingest_jobs SET status = $2, finished_at = now() WHERE id = $1`,
-      [jobId, "completed"]
+      [jobId, "done"]
     );
 
     await client.query("COMMIT");
-    return { jobId, documentId, chunks: chunks.length, warnings };
+    return { jobId, documentId, chunks: rawChunks.length, warnings };
   } catch (err) {
     await client.query("ROLLBACK");
     await client.query(
@@ -301,7 +346,7 @@ export async function ingestScheduleFile(params: {
 
     await client.query(
       `UPDATE ingest_jobs SET status = $2, finished_at = now() WHERE id = $1`,
-      [jobId, "completed"]
+      [jobId, "done"]
     );
     await client.query("COMMIT");
     return { jobId, inserted, warnings };

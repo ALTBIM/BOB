@@ -3,3 +3,9 @@
 node_modules
 .next
 dist
+.vscode/
+*.zip
+*.ifc
+viewer-prod.png
+capture-*.js
+apps/ifc-viewer/next-env.d.ts
