@@ -1,9 +1,0 @@
-﻿{
-  "channels": {
-    "telegram": {
-      "capabilities": {
-        "inlineButtons": "allowlist"
-      }
-    }
-  }
-}
