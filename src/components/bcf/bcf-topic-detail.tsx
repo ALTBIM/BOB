@@ -20,6 +20,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { nb } from 'date-fns/locale';
 import { BCFAuditLog } from './bcf-audit-log';
+import { MentionTextarea } from './mention-textarea';
 
 interface BCFTopicDetailProps {
   topicId: string;
@@ -60,15 +61,18 @@ export function BCFTopicDetail({ topicId, onUpdate }: BCFTopicDetailProps) {
     }
   };
 
-  const handleAddComment = async () => {
-    if (!newComment.trim()) return;
+  const handleAddComment = async (comment: string, mentions: string[]) => {
+    if (!comment.trim()) return;
 
     setSubmitting(true);
     try {
       const response = await fetch(`/api/bcf/topics/${topicId}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comment: newComment }),
+        body: JSON.stringify({ 
+          comment,
+          mentions,  // Pass mentioned user IDs
+        }),
       });
 
       if (response.ok) {
@@ -326,21 +330,14 @@ export function BCFTopicDetail({ topicId, onUpdate }: BCFTopicDetailProps) {
       </ScrollArea>
 
       {/* Add comment */}
-      <div className="border-t p-4 space-y-2">
-        <Textarea
-          placeholder="Skriv en kommentar..."
+      <div className="border-t p-4">
+        <MentionTextarea
           value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          rows={3}
+          onChange={setNewComment}
+          onSubmit={handleAddComment}
+          projectId={topic.project_id}
+          disabled={submitting}
         />
-        <Button
-          onClick={handleAddComment}
-          disabled={submitting || !newComment.trim()}
-          className="w-full"
-        >
-          <Send className="w-4 h-4 mr-2" />
-          Send kommentar
-        </Button>
       </div>
     </div>
   );

@@ -22,6 +22,7 @@ export async function POST(
   const topicId = params.id;
   const body = await request.json().catch(() => ({}));
   const comment = body.comment?.trim();
+  const mentions = body.mentions || []; // Array of user IDs mentioned
 
   if (!comment) {
     return NextResponse.json({ error: 'Kommentar kan ikke være tom.' }, { status: 400 });
@@ -94,6 +95,24 @@ export async function POST(
       message: `Ny kommentar på: ${topicData.title}`,
       link: `/app/bcf/${topicId}`,
     });
+  }
+
+  // Send notifications to mentioned users
+  if (mentions.length > 0) {
+    const mentionNotifications = mentions
+      .filter((mentionedUserId: string) => mentionedUserId !== user.id)
+      .map((mentionedUserId: string) => ({
+        user_id: mentionedUserId,
+        project_id: topic.project_id,
+        type: 'bcf_mention',
+        title: 'Du ble nevnt i en BCF kommentar',
+        message: `${user.email} nevnte deg i: ${topicData?.title || 'BCF topic'}`,
+        link: `/app/bcf/${topicId}`,
+      }));
+
+    if (mentionNotifications.length > 0) {
+      await supabase.from('notifications').insert(mentionNotifications);
+    }
   }
 
   return NextResponse.json({ comment: newComment });
