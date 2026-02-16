@@ -39,9 +39,38 @@ export default function BCFPage() {
     setSelectedTopicId(topicId);
   };
 
-  const handleExport = () => {
-    // TODO: Implement BCF export
-    console.log('Export BCF topics');
+  const handleExport = async () => {
+    if (!projectId) return;
+    
+    try {
+      const response = await fetch('/api/bcf/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          include_all: true,
+        }),
+      });
+
+      if (response.ok) {
+        // Download the ZIP file
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `bcf-export-${Date.now()}.bcfzip`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        console.error('Export failed:', await response.text());
+        alert('Kunne ikke eksportere BCF topics');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('En feil oppstod under eksport');
+    }
   };
 
   const handleImport = () => {
