@@ -440,6 +440,42 @@ export default function ChatPage() {
     setMemoryItems((prev) => prev.filter((m) => m.id !== id));
   };
 
+  const handleConvertToBCF = async () => {
+    if (!activeProjectId || messages.length === 0) return;
+
+    const conversationTitle = conversations.find(c => c.id === activeConversationId)?.title || 'Chat samtale';
+
+    try {
+      const response = await fetch('/api/bcf/convert-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: activeProjectId,
+          chat_thread_id: activeConversationId,
+          title: conversationTitle,
+          messages: messages.map(m => ({
+            author: m.author,
+            content: m.content,
+            timestamp: m.timestamp,
+          })),
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`BCF topic opprettet!\n\nDu kan se den i BCF Topics siden.`);
+        // Optionally redirect to BCF page
+        // window.location.href = `/app/bcf?project_id=${activeProjectId}`;
+      } else {
+        const error = await response.json();
+        alert(`Kunne ikke opprette BCF topic: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to convert to BCF:', error);
+      alert('En feil oppstod ved konvertering til BCF');
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr_320px] gap-5 min-h-[80vh]">
       <aside className="border border-border/60 rounded-xl bg-card/80 p-3 flex flex-col">
@@ -533,6 +569,16 @@ export default function ChatPage() {
               </Button>
               <Button size="sm" variant={withSources ? "default" : "outline"} onClick={() => setWithSources((v) => !v)}>
                 {withSources ? "Med kilder" : "Uten kilder"}
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={handleConvertToBCF}
+                disabled={!activeProjectId || messages.length === 0}
+                title="Konverter denne samtalen til en BCF topic"
+              >
+                <AlertCircle className="h-4 w-4 mr-1" />
+                BCF
               </Button>
               <select
                 className="text-sm border border-border rounded-md bg-background px-3 py-1.5"

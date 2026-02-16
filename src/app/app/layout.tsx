@@ -17,6 +17,7 @@ import {
   Menu,
   FileText,
   Image,
+  AlertCircle,
 } from "lucide-react";
 import clsx from "clsx";
 import { Fragment, useEffect, useMemo, useState, type ReactElement } from "react";
@@ -32,6 +33,7 @@ const primaryNav = [
   { name: "BOB Chat", href: "/app/chat", icon: MessageCircle },
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "BIM Modeller", href: "/app/models", icon: Box },
+  { name: "BCF Topics", href: "/app/bcf", icon: AlertCircle },
   { name: "Produksjon", href: "/app/production", icon: Wrench },
   { name: "Kontroller", href: "/app/controls", icon: ShieldCheck },
   { name: "Viewer", href: "/app/viewer", icon: Eye },

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Building2, Calendar, CheckCircle, Search } from "lucide-react";
+import { Building2, Calendar, CheckCircle, Search, AlertCircle } from "lucide-react";
 import LoginForm from "@/components/auth/LoginForm";
 import ProjectCreationModal from "@/components/projects/ProjectCreationModal";
 import { getRoleDisplayName } from "@/lib/database";
@@ -13,15 +13,37 @@ import { useSession } from "@/lib/session";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { DocumentIngestPanel } from "@/components/rag/DocumentIngestPanel";
 import { useActiveProject } from "@/lib/active-project";
+import Link from "next/link";
 
 export default function HomePage() {
   const { user, ready, logout } = useSession();
   const [isLoading, setIsLoading] = useState(true);
   const { projects, activeProjectId, setActiveProjectId, activeProject, refreshProjects } = useActiveProject();
+  const [bcfStats, setBcfStats] = useState<any>(null);
 
   useEffect(() => {
     if (ready) setIsLoading(false);
   }, [ready]);
+
+  useEffect(() => {
+    if (activeProjectId) {
+      fetchBcfStats();
+    }
+  }, [activeProjectId]);
+
+  const fetchBcfStats = async () => {
+    if (!activeProjectId) return;
+    
+    try {
+      const response = await fetch(`/api/bcf/stats?project_id=${activeProjectId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setBcfStats(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch BCF stats:', error);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -123,6 +145,24 @@ export default function HomePage() {
               </p>
             </CardContent>
           </Card>
+          
+          <Link href={activeProjectId ? `/app/bcf?project_id=${activeProjectId}` : '#'} className="block">
+            <Card className="border border-border bg-card shadow-none hover:shadow-sm transition-shadow cursor-pointer">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">BCF Topics</CardTitle>
+                <AlertCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold tracking-tight">
+                  {bcfStats?.activeCount || 0}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {bcfStats?.statusBreakdown.open || 0} åpne, {bcfStats?.statusBreakdown.in_progress || 0} pågår
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+          
           <Card className="border border-border bg-card shadow-none">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Mengdelister</CardTitle>
