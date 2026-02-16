@@ -48,10 +48,11 @@ BOB er en omfattende plattform for byggeprosjekter som kombinerer:
 - IFC-parsing og 3D-viewer
 - Autentisering og brukerstyring
 - RLS policies (Row Level Security)
+- BCF (BIM Collaboration Format) topic management ✅
 
 ### 🔴 Kritiske mangler
 - **IFC-søk med fasetter** (SearchResultsPage-opplevelse)
-- **Issues/RFI/Avvik-tracking** (komplett system)
+- **BCF import/export** (BCFZIP-filer) - Delvis implementert
 - **Kvalitetskontroller** (regelbasert)
 - **Kapplister med tegningsutsnitt** (produksjonsfunksjon)
 - **Prosjekt-bevisst AI** (sikker RAG)
@@ -141,7 +142,32 @@ POST /api/ifc/search
 - Dynamiske fasetter/filtre
 - Rask søk (<500ms)
 
-### 2. Avvik/RFI/Endringsforespørsler
+### 2. BCF Topics (BIM Collaboration Format) ✅
+```typescript
+// Opprett BCF topic koblet til IFC-element
+POST /api/bcf/topics
+{
+  "project_id": "uuid",
+  "title": "Manglende isolasjon i vegg",
+  "description": "Vegg-element mangler isolasjonslag",
+  "status": "open",
+  "priority": "høy",
+  "discipline": "ARK",
+  "stage": "Detaljprosjektering",
+  "ifc_element_guids": ["2O2Fr$t4X7Zf8NOew3FLOH"]
+}
+```
+
+**Funksjoner:**
+- Statusflyt (Open → In Progress → Resolved → Closed)
+- Tildeling til ansvarlig med varsling
+- Kommentarer med tråder
+- Viewpoints med snapshot og kamera-posisjon
+- Kobling til IFC-elementer
+- Import/eksport til BCFZIP (planlagt)
+- Catenda-lignende UX
+
+### 3. Avvik/RFI/Endringsforespørsler
 ```typescript
 // Opprett avvik koblet til IFC-element
 POST /api/issues
@@ -159,7 +185,7 @@ POST /api/issues
 - Kommentarer og vedlegg
 - Historikk/logg
 
-### 3. Kapplister med tegningsutsnitt
+### 4. Kapplister med tegningsutsnitt
 ```typescript
 // Generer kappliste fra IFC
 POST /api/cutlists/generate
@@ -175,7 +201,7 @@ POST /api/cutlists/generate
 - Tegningsutsnitt med pos.nr-markering
 - Eksport til PDF + XLSX
 
-### 4. Prosjekt-bevisst AI
+### 5. Prosjekt-bevisst AI
 ```typescript
 // AI som kun har tilgang til prosjektets data
 POST /api/ai/chat
