@@ -69,11 +69,19 @@ export async function POST(
 
   // If snapshot data is provided (base64), we need to update it separately
   if (body.snapshot_data) {
+    // Determine snapshot type from data URI
+    let snapshotType = 'png'; // default
+    if (body.snapshot_data.startsWith('data:image/jpeg') || body.snapshot_data.startsWith('data:image/jpg')) {
+      snapshotType = 'jpg';
+    } else if (body.snapshot_data.startsWith('data:image/png')) {
+      snapshotType = 'png';
+    }
+    
     await supabase
       .from('bcf_viewpoints')
       .update({
         snapshot_data: body.snapshot_data,
-        snapshot_type: body.snapshot_data.startsWith('data:image/png') ? 'png' : 'jpg',
+        snapshot_type: snapshotType,
       })
       .eq('id', viewpointId);
   }

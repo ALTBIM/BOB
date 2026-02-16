@@ -62,7 +62,24 @@ CREATE TABLE IF NOT EXISTS public.bcf_viewpoints (
   -- Metadata
   viewpoint_data JSONB DEFAULT '{}'::jsonb, -- Full BCF viewpoint XML as JSON
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  
+  -- Validate camera position structure
+  CONSTRAINT valid_camera_position CHECK (
+    camera_position IS NULL OR 
+    (camera_position ? 'x' AND camera_position ? 'y' AND camera_position ? 'z')
+  ),
+  CONSTRAINT valid_camera_direction CHECK (
+    camera_direction IS NULL OR 
+    (camera_direction ? 'x' AND camera_direction ? 'y' AND camera_direction ? 'z')
+  ),
+  CONSTRAINT valid_camera_up CHECK (
+    camera_up IS NULL OR 
+    (camera_up ? 'x' AND camera_up ? 'y' AND camera_up ? 'z')
+  ),
+  CONSTRAINT valid_snapshot_type CHECK (
+    snapshot_type IS NULL OR snapshot_type IN ('png', 'jpg', 'jpeg')
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_bcf_viewpoints_issue ON public.bcf_viewpoints(issue_id);

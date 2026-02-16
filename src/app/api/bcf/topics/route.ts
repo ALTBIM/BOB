@@ -38,10 +38,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'project_id er påkrevd.' }, { status: 400 });
   }
 
-  // Build query
+  // Build query - only fetch essential fields for list view
   let query = supabase
     .from('issues')
-    .select('*, assigned_user:auth.users!assigned_to(id, email), created_user:auth.users!created_by(id, email)', { count: 'exact' })
+    .select('*', { count: 'exact' })
     .eq('project_id', projectId)
     .eq('type', 'bcf');
 
