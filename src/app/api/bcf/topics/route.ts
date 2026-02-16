@@ -24,13 +24,17 @@ export async function GET(request: NextRequest) {
   const perPage = parseInt(searchParams.get('per_page') || '30');
   
   // Filters
-  const status = searchParams.getAll('status');
-  const priority = searchParams.getAll('priority');
+  const status = searchParams.get('status')?.split(',').filter(Boolean) || [];
+  const priority = searchParams.get('priority')?.split(',').filter(Boolean) || [];
   const assignedTo = searchParams.getAll('assigned_to');
   const labels = searchParams.getAll('labels');
-  const discipline = searchParams.getAll('discipline');
-  const stage = searchParams.getAll('stage');
+  const discipline = searchParams.get('discipline');
+  const stage = searchParams.get('stage');
   const search = searchParams.get('search');
+  const createdAfter = searchParams.get('created_after');
+  const createdBefore = searchParams.get('created_before');
+  const assignedToMe = searchParams.get('assigned_to_me') === 'true';
+  const unassigned = searchParams.get('unassigned') === 'true';
   const sortBy = searchParams.get('sort_by') || 'updated_at';
   const sortOrder = searchParams.get('sort_order') || 'desc';
 
@@ -55,17 +59,29 @@ export async function GET(request: NextRequest) {
   if (assignedTo.length > 0) {
     query = query.in('assigned_to', assignedTo);
   }
-  if (discipline.length > 0) {
-    query = query.in('discipline', discipline);
+  if (discipline) {
+    query = query.eq('discipline', discipline);
   }
-  if (stage.length > 0) {
-    query = query.in('stage', stage);
+  if (stage) {
+    query = query.eq('stage', stage);
   }
   if (labels.length > 0) {
     query = query.overlaps('labels', labels);
   }
   if (search) {
     query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
+  }
+  if (createdAfter) {
+    query = query.gte('created_at', createdAfter);
+  }
+  if (createdBefore) {
+    query = query.lte('created_at', createdBefore);
+  }
+  if (assignedToMe) {
+    query = query.eq('assigned_to', user.id);
+  }
+  if (unassigned) {
+    query = query.is('assigned_to', null);
   }
 
   // Sorting

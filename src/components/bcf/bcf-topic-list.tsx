@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Filter, Plus, CheckSquare, Trash2, UserPlus, Flag } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { nb } from 'date-fns/locale';
+import { BCFFilterPanel } from './bcf-filter-panel';
 
 interface BCFTopicListProps {
   projectId: string;
@@ -44,6 +45,12 @@ export function BCFTopicList({
         ...(searchQuery && { search: searchQuery }),
         ...(filters.status && { status: filters.status.join(',') }),
         ...(filters.priority && { priority: filters.priority.join(',') }),
+        ...(filters.stage && { stage: filters.stage }),
+        ...(filters.discipline && { discipline: filters.discipline }),
+        ...(filters.created_after && { created_after: filters.created_after }),
+        ...(filters.created_before && { created_before: filters.created_before }),
+        ...(filters.assigned_to_me && { assigned_to_me: 'true' }),
+        ...(filters.unassigned && { unassigned: 'true' }),
       });
 
       const response = await fetch(`/api/bcf/topics?${params}`);
@@ -248,11 +255,11 @@ export function BCFTopicList({
           />
         </div>
 
-        {/* Filter button */}
-        <Button variant="outline" size="sm" className="w-full">
-          <Filter className="w-4 h-4 mr-2" />
-          Filtrer
-        </Button>
+        {/* Filter panel */}
+        <BCFFilterPanel 
+          onFiltersChange={setFilters}
+          currentFilters={filters}
+        />
       </div>
 
       {/* Topics list */}
