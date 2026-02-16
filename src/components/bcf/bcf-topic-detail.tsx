@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { nb } from 'date-fns/locale';
+import { BCFAuditLog } from './bcf-audit-log';
 
 interface BCFTopicDetailProps {
   topicId: string;
@@ -311,6 +312,15 @@ export function BCFTopicDetail({ topicId, onUpdate }: BCFTopicDetailProps) {
                 </Card>
               ))}
             </div>
+          </div>
+
+          {/* Audit log */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              <MessageSquare className="w-4 h-4" />
+              Aktivitetslogg
+            </h3>
+            <BCFAuditLog topicId={topicId} projectId={topic.project_id} />
           </div>
         </div>
       </ScrollArea>
