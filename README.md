@@ -21,7 +21,14 @@ BOB er en omfattende plattform for byggeprosjekter som kombinerer:
 ## 📚 Dokumentasjon
 
 ### 🚀 Start her
+- **[BOB_REQUIREMENTS_INDEX.md](./BOB_REQUIREMENTS_INDEX.md)** - **MASTER DOCUMENT** - Complete requirements index and guide
 - **[GETTING_STARTED.md](./GETTING_STARTED.md)** - Din første guide! Start her for å komme i gang.
+
+### 📋 Requirements & Specifications (NEW)
+- **[BOB_FUNCTIONAL_REQUIREMENTS.md](./BOB_FUNCTIONAL_REQUIREMENTS.md)** - Complete functional requirements (translated from Norwegian spec)
+- **[BOB_IMPLEMENTATION_ROADMAP.md](./BOB_IMPLEMENTATION_ROADMAP.md)** - 16-week implementation plan with 4 phases
+- **[BOB_CHAT_REQUIREMENTS.md](./BOB_CHAT_REQUIREMENTS.md)** - Detailed chat system specification
+- **[BOB_SECURITY_REQUIREMENTS.md](./BOB_SECURITY_REQUIREMENTS.md)** - Mandatory security requirements
 
 ### 📋 Planlegging & Strategi
 - **[BOB_EXECUTIVE_SUMMARY.md](./BOB_EXECUTIVE_SUMMARY.md)** - Sammendrag for beslutningstakere
