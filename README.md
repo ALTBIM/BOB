@@ -34,6 +34,7 @@ BOB er en omfattende plattform for byggeprosjekter som kombinerer:
 - **[DATABASE_MIGRATIONS.sql](./DATABASE_MIGRATIONS.sql)** - Alle database-tabeller og migreringer
 - **[API_ENDPOINTS.md](./API_ENDPOINTS.md)** - Komplette API-endepunkter
 - **[IMPLEMENTATION_GUIDE.md](./IMPLEMENTATION_GUIDE.md)** - Kodeeksempler og implementering
+- **[scripts/USER_CREATION_GUIDE.md](./scripts/USER_CREATION_GUIDE.md)** - Guide for oppretting av brukere og admin-tilgang
 
 ---
 
@@ -84,7 +85,15 @@ psql -h your-db-host -U postgres -d postgres -f supabase/schema.sql
 psql -h your-db-host -U postgres -d postgres -f DATABASE_MIGRATIONS.sql
 ```
 
-### 5. Start utviklingsserver
+### 5. Opprett admin-bruker
+Se [scripts/USER_CREATION_GUIDE.md](./scripts/USER_CREATION_GUIDE.md) for å opprette første admin-bruker.
+
+Rask metode via Supabase Dashboard:
+1. Gå til Authentication → Users
+2. Opprett bruker med ønsket e-post og passord
+3. Kjør SQL: `SELECT * FROM public.add_admin_by_email('din@epost.no');`
+
+### 6. Start utviklingsserver
 ```bash
 npm run dev
 ```
