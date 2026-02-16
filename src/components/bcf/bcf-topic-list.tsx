@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, Filter, Plus } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Search, Filter, Plus, CheckSquare, Trash2, UserPlus, Flag } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { nb } from 'date-fns/locale';
 
@@ -28,6 +29,8 @@ export function BCFTopicList({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<BCFTopicFilters>({});
+  const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
+  const [bulkMode, setBulkMode] = useState(false);
 
   useEffect(() => {
     fetchTopics();
@@ -86,17 +89,153 @@ export function BCFTopicList({
     }
   };
 
+  // Bulk operations
+  const toggleBulkMode = () => {
+    setBulkMode(!bulkMode);
+    setSelectedTopics(new Set());
+  };
+
+  const toggleTopicSelection = (topicId: string) => {
+    const newSelection = new Set(selectedTopics);
+    if (newSelection.has(topicId)) {
+      newSelection.delete(topicId);
+    } else {
+      newSelection.add(topicId);
+    }
+    setSelectedTopics(newSelection);
+  };
+
+  const selectAll = () => {
+    setSelectedTopics(new Set(topics.map(t => t.id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedTopics(new Set());
+  };
+
+  const handleBulkStatusChange = async (newStatus: string) => {
+    if (selectedTopics.size === 0) return;
+
+    try {
+      const updatePromises = Array.from(selectedTopics).map(topicId =>
+        fetch(`/api/bcf/topics/${topicId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus }),
+        })
+      );
+
+      await Promise.all(updatePromises);
+      alert(`${selectedTopics.size} topics oppdatert til status: ${getStatusLabel(newStatus)}`);
+      setSelectedTopics(new Set());
+      fetchTopics();
+    } catch (error) {
+      console.error('Bulk status change failed:', error);
+      alert('Kunne ikke oppdatere topics');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedTopics.size === 0) return;
+    
+    if (!confirm(`Er du sikker på at du vil slette ${selectedTopics.size} topics?`)) {
+      return;
+    }
+
+    try {
+      const deletePromises = Array.from(selectedTopics).map(topicId =>
+        fetch(`/api/bcf/topics/${topicId}`, {
+          method: 'DELETE',
+        })
+      );
+
+      await Promise.all(deletePromises);
+      alert(`${selectedTopics.size} topics slettet`);
+      setSelectedTopics(new Set());
+      fetchTopics();
+    } catch (error) {
+      console.error('Bulk delete failed:', error);
+      alert('Kunne ikke slette topics');
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-white border-r">
       {/* Header */}
       <div className="p-4 border-b space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">BCF Topics</h2>
-          <Button size="sm" onClick={onCreateNew}>
-            <Plus className="w-4 h-4 mr-1" />
-            Ny
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              size="sm" 
+              variant={bulkMode ? "default" : "outline"}
+              onClick={toggleBulkMode}
+            >
+              <CheckSquare className="w-4 h-4 mr-1" />
+              {bulkMode ? 'Avbryt' : 'Velg'}
+            </Button>
+            <Button size="sm" onClick={onCreateNew}>
+              <Plus className="w-4 h-4 mr-1" />
+              Ny
+            </Button>
+          </div>
         </div>
+
+        {/* Bulk actions toolbar */}
+        {bulkMode && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">
+                {selectedTopics.size} valgt
+              </span>
+              <div className="flex gap-2">
+                <Button size="sm" variant="ghost" onClick={selectAll}>
+                  Velg alle
+                </Button>
+                <Button size="sm" variant="ghost" onClick={deselectAll}>
+                  Fjern alle
+                </Button>
+              </div>
+            </div>
+            
+            {selectedTopics.size > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => handleBulkStatusChange('in_progress')}
+                >
+                  <Flag className="w-3 h-3 mr-1" />
+                  Sett pågår
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => handleBulkStatusChange('resolved')}
+                >
+                  <Flag className="w-3 h-3 mr-1" />
+                  Sett løst
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => handleBulkStatusChange('closed')}
+                >
+                  <Flag className="w-3 h-3 mr-1" />
+                  Sett lukket
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="destructive"
+                  onClick={handleBulkDelete}
+                >
+                  <Trash2 className="w-3 h-3 mr-1" />
+                  Slett
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Search */}
         <div className="relative">
@@ -132,15 +271,32 @@ export function BCFTopicList({
                 className={`p-4 rounded-none border-0 border-l-4 cursor-pointer hover:bg-gray-50 transition-colors ${
                   selectedTopicId === topic.id 
                     ? 'bg-blue-50 border-l-blue-500' 
+                    : selectedTopics.has(topic.id)
+                    ? 'bg-blue-50 border-l-blue-300'
                     : 'border-l-transparent'
                 }`}
-                onClick={() => onSelectTopic(topic)}
+                onClick={() => {
+                  if (bulkMode) {
+                    toggleTopicSelection(topic.id);
+                  } else {
+                    onSelectTopic(topic);
+                  }
+                }}
               >
                 <div className="space-y-2">
-                  {/* Title */}
-                  <h3 className="font-medium text-sm line-clamp-2">
-                    {topic.title}
-                  </h3>
+                  {/* Title with checkbox */}
+                  <div className="flex items-start gap-2">
+                    {bulkMode && (
+                      <Checkbox
+                        checked={selectedTopics.has(topic.id)}
+                        onCheckedChange={() => toggleTopicSelection(topic.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    )}
+                    <h3 className="font-medium text-sm line-clamp-2 flex-1">
+                      {topic.title}
+                    </h3>
+                  </div>
 
                   {/* Metadata row */}
                   <div className="flex items-center gap-2 flex-wrap">
