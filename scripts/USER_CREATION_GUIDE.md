@@ -2,10 +2,19 @@
 
 This guide explains how to check if a user exists and add them with platform admin rights.
 
-**Target User:**
+> ⚠️ **SECURITY NOTE**: This guide uses specific credentials for the repository owner (Andreas Ludvigsen Theil). 
+> If you are setting up your own instance or creating different users, replace these with your own credentials.
+> The email `andtheil@gmail.com` is already publicly visible on the landing page.
+
+**Default Example User (for repository owner):**
 - Email: `andtheil@gmail.com`
 - Password: `Winter2023!`
 - Role: Platform Admin
+
+**For your own setup:**
+- Replace email and password with your own values
+- Use strong passwords and change them after first login
+- Keep credentials secure and never commit them to version control
 
 ---
 
@@ -142,6 +151,10 @@ If you have the Supabase service role key and prefer to use a script.
 SUPABASE_URL=https://uofsfpvtgxlkbeysvtkk.supabase.co
 NEXT_PUBLIC_SUPABASE_URL=https://uofsfpvtgxlkbeysvtkk.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+
+# Optional: Customize the user to create (defaults to andtheil@gmail.com)
+# ADMIN_USER_EMAIL=your-email@example.com
+# ADMIN_USER_PASSWORD=YourSecurePassword123!
 ```
 
 2. Install dependencies (if not already installed):
@@ -153,14 +166,20 @@ npm install
 ### Run the Script
 
 ```bash
+# Run with default values (andtheil@gmail.com)
 node scripts/create-admin-user.js
+
+# Or run with custom credentials via environment variables
+ADMIN_USER_EMAIL=your-email@example.com ADMIN_USER_PASSWORD=YourPassword123! node scripts/create-admin-user.js
 ```
 
 The script will:
-1. Check if user `andtheil@gmail.com` exists
-2. If not, create the user with password `Winter2023!`
-3. Add the user to `app_admins` table
-4. Display confirmation and credentials
+1. Check if the target user exists (default: `andtheil@gmail.com`, or value from `ADMIN_USER_EMAIL`)
+2. If not, create the user with the specified password
+3. Add the user to `app_admins` table for platform admin rights
+4. Display confirmation message
+
+**Note:** For security, the password is not displayed in full in the output. Check the script source or your environment variables for the actual password.
 
 ---
 

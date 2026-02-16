@@ -11,8 +11,12 @@
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config({ path: '.env.local' });
 
-const TARGET_EMAIL = 'andtheil@gmail.com';
-const TARGET_PASSWORD = 'Winter2023!';
+// NOTE: These are default values for the repository owner's account.
+// To create a different user, set these environment variables:
+// - ADMIN_USER_EMAIL
+// - ADMIN_USER_PASSWORD
+const TARGET_EMAIL = process.env.ADMIN_USER_EMAIL || 'andtheil@gmail.com';
+const TARGET_PASSWORD = process.env.ADMIN_USER_PASSWORD || 'Winter2023!';
 
 async function main() {
   console.log('🔍 Checking for user registration...\n');
@@ -78,7 +82,7 @@ async function main() {
       console.log(`✅ User created successfully!`);
       console.log(`   - Email: ${newUser.user.email}`);
       console.log(`   - User ID: ${newUser.user.id}`);
-      console.log(`   - Password: ${TARGET_PASSWORD}`);
+      console.log(`   - Password: ${TARGET_PASSWORD.substring(0, 3)}****** (check script for full password)`);
       userId = newUser.user.id;
     }
 
@@ -119,13 +123,14 @@ async function main() {
     console.log('='.repeat(60));
     console.log('\n📋 User Details:');
     console.log(`   Email:    ${TARGET_EMAIL}`);
-    console.log(`   Password: ${TARGET_PASSWORD}`);
+    console.log(`   Password: ******** (check script or env vars for password)`);
     console.log(`   User ID:  ${userId}`);
     console.log(`   Status:   Platform Admin ✅`);
     console.log('\n📝 Next steps:');
     console.log('   1. Go to the login page');
     console.log('   2. Sign in with the credentials above');
     console.log('   3. You will have full platform admin access');
+    console.log('   4. IMPORTANT: Change the password after first login!');
     console.log('');
 
   } catch (error) {

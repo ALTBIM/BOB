@@ -26,7 +26,10 @@ This directory contains utility scripts for the BOB platform.
 
 ## Quick Start: Create Admin User
 
-If you need to create a user with email `andtheil@gmail.com` and admin rights:
+**Note:** The examples below use `andtheil@gmail.com` (repository owner's email). 
+Replace with your own email when setting up your instance.
+
+If you need to create a user with admin rights:
 
 ### Option 1: Supabase Dashboard (Easiest)
 See [USER_CREATION_GUIDE.md](./USER_CREATION_GUIDE.md#method-1-using-supabase-dashboard--sql-recommended)

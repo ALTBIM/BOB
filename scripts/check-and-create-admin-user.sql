@@ -1,12 +1,16 @@
 -- SQL Script to check if a user exists and add them as platform admin
 -- This script should be run in the Supabase SQL Editor
 -- 
+-- SECURITY NOTE: This script contains example credentials for the repository owner.
+-- Replace 'andtheil@gmail.com' with your own email when creating your own admin user.
+-- The email mentioned is already publicly visible on the landing page.
+-- 
 -- Instructions:
 -- 1. First, create the user in Supabase Dashboard:
 --    - Go to Authentication > Users
 --    - Click "Add user" > "Create new user"
---    - Email: andtheil@gmail.com
---    - Password: Winter2023!
+--    - Email: [YOUR_EMAIL] (e.g., andtheil@gmail.com for the repo owner)
+--    - Password: [YOUR_SECURE_PASSWORD] (e.g., Winter2023!)
 --    - Auto Confirm User: YES (check this box)
 --    - Click "Create user"
 --
