@@ -7,6 +7,7 @@ import { BCFTopicList } from '@/components/bcf/bcf-topic-list';
 import { BCFTopicDetail } from '@/components/bcf/bcf-topic-detail';
 import { CreateBCFTopicDialog } from '@/components/bcf/create-bcf-topic-dialog';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Download, Upload } from 'lucide-react';
 
 export default function BCFPage() {
@@ -14,6 +15,8 @@ export default function BCFPage() {
   const [projectId, setProjectId] = useState('');
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     // Get project ID from URL or localStorage
@@ -74,8 +77,41 @@ export default function BCFPage() {
   };
 
   const handleImport = () => {
-    // TODO: Implement BCF import
-    console.log('Import BCF topics');
+    setShowImportDialog(true);
+  };
+
+  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !projectId) return;
+
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('project_id', projectId);
+      formData.append('conflict_resolution', 'skip'); // Default to skip conflicts
+
+      const response = await fetch('/api/bcf/import', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`Import vellykket!\n\nImportert: ${result.imported_count}\nOppdatert: ${result.updated_count}\nHoppet over: ${result.skipped_count}\n${result.errors.length > 0 ? `\nFeil: ${result.errors.length}` : ''}`);
+        setShowImportDialog(false);
+        // Refresh the list
+        window.location.reload();
+      } else {
+        const error = await response.json();
+        alert(`Import feilet: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      alert('En feil oppstod under import');
+    } finally {
+      setImporting(false);
+    }
   };
 
   if (!projectId) {
@@ -149,6 +185,38 @@ export default function BCFPage() {
         projectId={projectId}
         onSuccess={handleCreateSuccess}
       />
+
+      {/* Import dialog */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Importer BCFZIP</DialogTitle>
+            <DialogDescription>
+              Last opp en BCF fil (.bcfzip) for å importere topics til dette prosjektet.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="bcf-file" className="block text-sm font-medium mb-2">
+                Velg BCFZIP fil
+              </label>
+              <input
+                id="bcf-file"
+                type="file"
+                accept=".bcfzip,.zip"
+                onChange={handleImportFile}
+                disabled={importing}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+            </div>
+            {importing && (
+              <div className="text-sm text-gray-500">
+                Importerer... Dette kan ta litt tid.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
